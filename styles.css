@@ -63,22 +63,32 @@
   width: 100%;
   margin-top: 1.5rem;
   overflow-x: auto;
+  border-radius: 0.5rem;
 }
 
 .history-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 0;
+  table-layout: fixed;
   border-collapse: collapse;
   background: var(--surface-color, #fff);
   border: 1px solid var(--border-color, #cbd5e1);
 }
+
+.history-table th:nth-child(1) { width: 15%; }
+.history-table th:nth-child(2) { width: 21%; }
+.history-table th:nth-child(3) { width: 16%; }
+.history-table th:nth-child(4) { width: 14%; }
+.history-table th:nth-child(5) { width: 14%; }
+.history-table th:nth-child(6) { width: 20%; }
 
 .history-table th,
 .history-table td {
   padding: 0.8rem 0.9rem;
   border-bottom: 1px solid var(--border-color, #cbd5e1);
   text-align: left;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
 }
 
 .history-table th {
@@ -117,6 +127,80 @@
   .admin-player-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .history-table-wrap {
+    overflow: visible;
+  }
+
+  .history-table,
+  .history-table thead,
+  .history-table tbody,
+  .history-table tr,
+  .history-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .history-table {
+    border: 0;
+    background: transparent;
+  }
+
+  .history-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .history-table tr {
+    margin-bottom: 0.75rem;
+    padding: 0.35rem 0;
+    border: 1px solid var(--border-color, #cbd5e1);
+    border-radius: 0.5rem;
+    background: var(--surface-color, #fff);
+  }
+
+  .history-table td {
+    display: grid;
+    grid-template-columns: minmax(7rem, 34%) 1fr;
+    gap: 0.75rem;
+    padding: 0.65rem 0.8rem;
+    border-bottom: 1px solid var(--border-color, #cbd5e1);
+    text-align: right;
+  }
+
+  .history-table td::before {
+    color: var(--muted-color, #64748b);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .history-table td:nth-child(1)::before { content: "Mode"; }
+  .history-table td:nth-child(2)::before { content: "Opponent"; }
+  .history-table td:nth-child(3)::before { content: "Time control"; }
+  .history-table td:nth-child(4)::before { content: "Status"; }
+  .history-table td:nth-child(5)::before { content: "Result"; }
+  .history-table td:nth-child(6)::before { content: "Played"; }
+
+  .history-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .history-table .history-empty {
+    display: block;
+    border: 0;
+    text-align: center !important;
+  }
+
+  .history-table .history-empty::before {
+    content: none;
   }
 }
 :root {
