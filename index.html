@@ -162,7 +162,21 @@
             Back to game choices
           </button>
         </div>
-        <div id="gameHistoryList" class="admin-players"></div>
+        <div class="history-table-wrap">
+          <table class="history-table" id="gameHistoryTable">
+            <thead>
+              <tr>
+                <th>Mode</th>
+                <th>Opponent</th>
+                <th>Time control</th>
+                <th>Status</th>
+                <th>Result</th>
+                <th>Played</th>
+              </tr>
+            </thead>
+            <tbody id="gameHistoryList"></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="screen hidden" id="dailyPuzzleScreen">
@@ -1130,16 +1144,18 @@
           ? games
               .map(
                 (gameRecord) => `
-          <div class="admin-player-row">
-            <strong>${String(gameRecord.mode || "Game").replace(/[&<>"']/g, "")}</strong>
-            <span>vs ${String(gameRecord.opponent || "Unknown").replace(/[&<>"']/g, "")}</span>
-            <span>${String(gameRecord.status || "unknown").replace(/[&<>"']/g, "")}${gameRecord.result ? ` (${String(gameRecord.result).replace(/[&<>"']/g, "")})` : ""}</span>
-            <small>${gameRecord.created_at ? new Date(gameRecord.created_at).toLocaleString() : ""}</small>
-          </div>
+          <tr>
+            <td>${String(gameRecord.mode || "Game").replace(/[&<>"']/g, "")}</td>
+            <td>${String(gameRecord.opponent || "Unknown").replace(/[&<>"']/g, "")}</td>
+            <td>${String(gameRecord.time_control || "unlimited").replace(/[&<>"']/g, "")}</td>
+            <td><span class="history-status status-${String(gameRecord.status || "unknown").replace(/[^a-z_]/gi, "")}">${String(gameRecord.status || "unknown").replace(/[&<>"']/g, "")}</span></td>
+            <td>${gameRecord.result ? String(gameRecord.result).replace(/[&<>"']/g, "") : "-"}</td>
+            <td>${gameRecord.created_at ? new Date(gameRecord.created_at).toLocaleString() : "-"}</td>
+          </tr>
         `,
               )
               .join("")
-          : '<p class="daily-archive-empty">No games played yet.</p>';
+          : '<tr><td colspan="6" class="history-empty">No games played yet.</td></tr>';
       }
 
       function show(screen) {

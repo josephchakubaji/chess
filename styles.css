@@ -59,6 +59,59 @@
   color: var(--muted-color, #64748b);
 }
 
+.history-table-wrap {
+  width: 100%;
+  margin-top: 1.5rem;
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-color, #cbd5e1);
+}
+
+.history-table th,
+.history-table td {
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid var(--border-color, #cbd5e1);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.history-table th {
+  color: var(--muted-color, #64748b);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.history-status {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.status-completed { background: #dcfce7; color: #166534; }
+.status-draw { background: #fef3c7; color: #92400e; }
+.status-abandoned { background: #fee2e2; color: #991b1b; }
+.status-in_progress { background: #dbeafe; color: #1e40af; }
+
+.history-empty {
+  padding: 1.5rem !important;
+  color: var(--muted-color, #64748b);
+  text-align: center !important;
+}
+
 @media (max-width: 600px) {
   .admin-header,
   .admin-player-row {
