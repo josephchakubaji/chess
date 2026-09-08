@@ -417,6 +417,7 @@ function restoreGameState() {
     currentPuzzleStep = Number.isInteger(saved.currentPuzzleStep) ? saved.currentPuzzleStep : currentPuzzleStep;
     currentPuzzlePage = saved.currentPuzzlePage === "daily" ? "daily" : "practice";
     dailyPuzzle = saved.dailyPuzzle || dailyPuzzle;
+    activePuzzle = currentPuzzleIndex === -1 ? dailyPuzzle : null;
     selected = null;
     replaying = false;
 
@@ -473,6 +474,7 @@ function hideGameOverModal() {
 }
 
 let dailyPuzzle = null;
+let activePuzzle = null;
 let dailyTimerInterval = null;
 let archivedDailyPuzzles = [];
 let dailyArchiveLoaded = false;
@@ -552,7 +554,10 @@ function getCachedDailyPuzzle(todayKey) {
       cached.puzzle &&
       cached.puzzle.source === "lichess-api"
     ) {
-      return cached.puzzle;
+      return {
+        ...cached.puzzle,
+        solution: normalizeStoredPuzzleSolution(cached.puzzle.fen, cached.puzzle.solution)
+      };
     }
   } catch (e) {
     console.log("Daily puzzle cache ignored:", e);
@@ -568,6 +573,56 @@ function cacheDailyPuzzle(puzzle, todayKey) {
   }));
 }
 
+function normalizePuzzleSolution(solution) {
+  if (Array.isArray(solution)) return solution.filter((move) => typeof move === "string" && move.trim());
+  if (typeof solution === "string") {
+    try {
+      const parsed = JSON.parse(solution);
+      return Array.isArray(parsed) ? parsed.filter((move) => typeof move === "string" && move.trim()) : [];
+    } catch (_e) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function normalizeStoredPuzzleSolution(fen, solution) {
+  const moves = normalizePuzzleSolution(solution);
+  if (!fen || moves.length < 2) return moves;
+
+  try {
+    const position = new Chess();
+    if (!position.load(fen)) return moves;
+    const firstMove = moves[0];
+    const parsedMove = firstMove.length >= 4
+      ? position.move({
+        from: firstMove.slice(0, 2),
+        to: firstMove.slice(2, 4),
+        promotion: firstMove[4] || "q"
+      })
+      : position.move(firstMove);
+
+    if (!parsedMove) {
+      const nextMove = moves[1];
+      const nextPosition = new Chess();
+      if (nextPosition.load(fen)) {
+        const nextParsedMove = nextMove.length >= 4
+          ? nextPosition.move({
+            from: nextMove.slice(0, 2),
+            to: nextMove.slice(2, 4),
+            promotion: nextMove[4] || "q"
+          })
+          : nextPosition.move(nextMove);
+        if (nextParsedMove) return moves.slice(1);
+      }
+    }
+  } catch (_e) {
+    // Keep the stored solution unchanged if it cannot be inspected.
+  }
+
+  return moves;
+}
+
 function rowToDailyPuzzle(row) {
   return {
     id: row.puzzle_id || `daily_${row.date}`,
@@ -576,7 +631,7 @@ function rowToDailyPuzzle(row) {
     category: row.category || "Advanced",
     goal: row.goal,
     fen: row.fen,
-    solution: Array.isArray(row.solution) ? row.solution : [],
+    solution: normalizeStoredPuzzleSolution(row.fen, row.solution),
     hint: row.hint || "Find the forcing tactical move.",
     rating: row.rating,
     themes: row.themes || [],
@@ -621,7 +676,8 @@ async function saveDailyPuzzleToSupabase(puzzle) {
 
     if (data) {
       const savedPuzzle = rowToDailyPuzzle(data);
-      if (savedPuzzle.date === puzzle.date) {
+      const viewingArchivedPuzzle = puzzleMode && currentPuzzleIndex === -1 && dailyPuzzle && dailyPuzzle.date !== savedPuzzle.date;
+      if (savedPuzzle.date === puzzle.date && !viewingArchivedPuzzle) {
         dailyPuzzle = savedPuzzle;
         cacheDailyPuzzle(savedPuzzle, savedPuzzle.date);
         renderDailyPuzzleBanner();
@@ -759,7 +815,7 @@ async function fetchOnlineDailyPuzzle(todayKey) {
 
       const cleanFen = playerFen.split(" ").slice(0, 4).join(" ") + " 0 1";
 
-      dailyPuzzle = {
+      const fetchedPuzzle = {
         id: `lichess_daily_${todayKey}_${p.id || "api"}`,
         sourcePuzzleId: p.id,
         title: `Daily: ${p.themes && p.themes[0] ? p.themes[0].replace(/([A-Z])/g, ' $1') : 'Tactical Shot'}`,
@@ -774,9 +830,13 @@ async function fetchOnlineDailyPuzzle(todayKey) {
         source: "lichess-api",
         date: todayKey
       };
-      cacheDailyPuzzle(dailyPuzzle, todayKey);
-      saveDailyPuzzleToSupabase(dailyPuzzle);
-      renderDailyPuzzleBanner();
+      cacheDailyPuzzle(fetchedPuzzle, todayKey);
+      const viewingArchivedPuzzle = puzzleMode && currentPuzzleIndex === -1 && dailyPuzzle && dailyPuzzle.date !== todayKey;
+      if (!viewingArchivedPuzzle) {
+        dailyPuzzle = fetchedPuzzle;
+        renderDailyPuzzleBanner();
+      }
+      saveDailyPuzzleToSupabase(fetchedPuzzle);
     }
   } catch (e) {
     console.log("Using local daily puzzle fallback:", e);
@@ -824,6 +884,7 @@ function loadCustomPuzzle(puzzle) {
   currentPuzzleIndex = -1;
   currentPuzzleStep = 0;
   currentPuzzlePage = "daily";
+  activePuzzle = puzzle;
 
   stopClock();
   hideGameOverModal();
@@ -915,6 +976,7 @@ function loadPuzzle(idx) {
   currentPuzzleIndex = idx;
   currentPuzzleStep = 0;
   currentPuzzlePage = "practice";
+  activePuzzle = null;
   const puzzle = PUZZLES[idx];
 
   stopClock();
@@ -1364,7 +1426,7 @@ async function clickSquare(square) {
 
     if (move) {
       if (puzzleMode) {
-        const puzzle = currentPuzzleIndex === -1 ? dailyPuzzle : PUZZLES[currentPuzzleIndex];
+        const puzzle = currentPuzzleIndex === -1 ? activePuzzle || dailyPuzzle : PUZZLES[currentPuzzleIndex];
         const targetSolution = puzzle && puzzle.solution ? puzzle.solution[currentPuzzleStep] : null;
         const expected = targetSolution ? targetSolution.toLowerCase().replace(/[\+#x=\s]/g, "") : "";
         const uci = (move.from + move.to + (move.promotion || "")).toLowerCase();
