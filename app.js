@@ -2209,14 +2209,30 @@ if (reviewPrevBtn) reviewPrevBtn.onclick = () => applyReviewPosition(Math.max(0,
 if (reviewNextBtn) reviewNextBtn.onclick = () => applyReviewPosition(Math.min(reviewMoves.length, reviewPly + 1));
 if (reviewEndBtn) reviewEndBtn.onclick = () => applyReviewPosition(reviewMoves.length);
 
+function getPuzzleHint(puzzle) {
+  const hint = puzzle.hint || "Look for the strongest forcing move.";
+  const targetSolution = puzzle.solution && puzzle.solution[currentPuzzleStep];
+  if (!targetSolution || targetSolution.length < 4) return hint;
+
+  const from = targetSolution.slice(0, 2);
+  const to = targetSolution.slice(2, 4);
+  const piece = chess.get(from);
+  if (!piece) return hint;
+
+  const pieceNames = { p: "pawn", n: "Knight", b: "Bishop", r: "Rook", q: "Queen", k: "King" };
+  const legalMove = chess.moves({ square: from, verbose: true }).find((move) => move.to === to);
+  const captureText = legalMove?.captured ? ` to capture the ${pieceNames[legalMove.captured]}` : "";
+  return `${hint} Start by moving your ${pieceNames[piece.type]} from ${from} to ${to}${captureText}.`;
+}
+
 $("hintBtn").onclick = () => {
-  const puzzle = currentPuzzleIndex === -1 ? dailyPuzzle : PUZZLES[currentPuzzleIndex];
-  if (puzzle) showToast(`💡 Hint: ${puzzle.hint}`);
+  const puzzle = currentPuzzleIndex === -1 ? activePuzzle || dailyPuzzle : PUZZLES[currentPuzzleIndex];
+  if (puzzle) showToast(`💡 Hint: ${getPuzzleHint(puzzle)}`);
 };
 
 $("retryPuzzleBtn").onclick = () => {
-  if (currentPuzzleIndex === -1 && dailyPuzzle) {
-    loadCustomPuzzle(dailyPuzzle);
+  if (currentPuzzleIndex === -1 && (activePuzzle || dailyPuzzle)) {
+    loadCustomPuzzle(activePuzzle || dailyPuzzle);
   } else {
     loadPuzzle(currentPuzzleIndex);
   }
@@ -2249,8 +2265,8 @@ $("resetPuzzlesProgressBtn").onclick = () => {
 $("modalNewGameBtn").onclick = () => {
   hideGameOverModal();
   if (puzzleMode) {
-    if (currentPuzzleIndex === -1 && dailyPuzzle) {
-      loadCustomPuzzle(dailyPuzzle);
+    if (currentPuzzleIndex === -1 && (activePuzzle || dailyPuzzle)) {
+      loadCustomPuzzle(activePuzzle || dailyPuzzle);
     } else {
       const nextIdx = (currentPuzzleIndex + 1) % PUZZLES.length;
       loadPuzzle(nextIdx);
