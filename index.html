@@ -3179,6 +3179,17 @@
       syncMoveHintsToggles();
       buildBoard();
       restoreAppState();
+      const launchMode = new URLSearchParams(window.location.search).get(
+        "mode",
+      );
+      if (launchMode === "computer") {
+        show(computer);
+      } else if (launchMode === "player") {
+        show(playerMode);
+      } else if (launchMode === "puzzles") {
+        renderPuzzleGrid();
+        show(puzzleScreen);
+      }
       joinRoomFromLink();
       updateDailyTimer();
       if (!dailyTimerInterval) {
