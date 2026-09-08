@@ -293,6 +293,11 @@ function saveAppState(gameId = "default") {
       difficulty: difficulty,
       timedMode: timedMode,
       puzzleMode: puzzleMode,
+      currentPuzzleIndex: currentPuzzleIndex,
+      currentPuzzleStep: currentPuzzleStep,
+      currentPuzzlePage: currentPuzzlePage,
+      dailyPuzzle: dailyPuzzle,
+      activePuzzle: activePuzzle,
       timestamp: Date.now()
     };
 
@@ -339,6 +344,11 @@ function restoreAppState() {
     difficulty = saved.difficulty || "medium";
     timedMode = saved.timedMode || false;
     color = saved.color || "w";
+    currentPuzzleIndex = Number.isInteger(saved.currentPuzzleIndex) ? saved.currentPuzzleIndex : currentPuzzleIndex;
+    currentPuzzleStep = Number.isInteger(saved.currentPuzzleStep) ? saved.currentPuzzleStep : currentPuzzleStep;
+    currentPuzzlePage = saved.currentPuzzlePage === "daily" ? "daily" : currentPuzzlePage;
+    dailyPuzzle = saved.dailyPuzzle || dailyPuzzle;
+    activePuzzle = saved.activePuzzle || (currentPuzzleIndex === -1 ? dailyPuzzle : null);
 
     draw();
     return true;
