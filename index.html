@@ -1002,6 +1002,7 @@
             currentPuzzleStep,
             currentPuzzlePage,
             dailyPuzzle,
+            activePuzzle,
           }),
         );
       }
@@ -1065,6 +1066,9 @@
           currentPuzzlePage =
             saved.currentPuzzlePage === "daily" ? "daily" : "practice";
           dailyPuzzle = saved.dailyPuzzle || dailyPuzzle;
+          activePuzzle =
+            saved.activePuzzle ||
+            (currentPuzzleIndex === -1 ? dailyPuzzle : null);
           selected = null;
           replaying = false;
 
@@ -1146,6 +1150,7 @@
       }
 
       let dailyPuzzle = null;
+      let activePuzzle = null;
       let dailyTimerInterval = null;
       let archivedDailyPuzzles = [];
       let dailyArchiveLoaded = false;
@@ -1562,6 +1567,7 @@
         currentPuzzleIndex = -1;
         currentPuzzleStep = 0;
         currentPuzzlePage = "daily";
+        activePuzzle = puzzle;
 
         stopClock();
         hideGameOverModal();
@@ -2132,7 +2138,7 @@
             if (puzzleMode) {
               const puzzle =
                 currentPuzzleIndex === -1
-                  ? dailyPuzzle
+                  ? activePuzzle || dailyPuzzle
                   : PUZZLES[currentPuzzleIndex];
               const targetSolution =
                 puzzle && puzzle.solution
@@ -2952,13 +2958,21 @@
 
       $("hintBtn").onclick = () => {
         const puzzle =
-          currentPuzzleIndex === -1 ? dailyPuzzle : PUZZLES[currentPuzzleIndex];
+          currentPuzzleIndex === -1
+            ? activePuzzle || dailyPuzzle
+            : PUZZLES[currentPuzzleIndex];
         if (puzzle) showToast(`💡 Hint: ${puzzle.hint}`);
       };
 
       $("retryPuzzleBtn").onclick = () => {
-        if (currentPuzzleIndex === -1 && dailyPuzzle) {
-          loadCustomPuzzle(dailyPuzzle);
+        if (currentPuzzleIndex === -1) {
+          if (activePuzzle) {
+            loadCustomPuzzle(activePuzzle);
+          } else {
+            showToast(
+              "This daily puzzle is no longer loaded. Please select it again from the archive.",
+            );
+          }
         } else {
           loadPuzzle(currentPuzzleIndex);
         }
@@ -2997,8 +3011,8 @@
       $("modalNewGameBtn").onclick = () => {
         hideGameOverModal();
         if (puzzleMode) {
-          if (currentPuzzleIndex === -1 && dailyPuzzle) {
-            loadCustomPuzzle(dailyPuzzle);
+          if (currentPuzzleIndex === -1 && activePuzzle) {
+            loadCustomPuzzle(activePuzzle);
           } else {
             const nextIdx = (currentPuzzleIndex + 1) % PUZZLES.length;
             loadPuzzle(nextIdx);
