@@ -64,11 +64,140 @@ create table if not exists public.game_history (
   time_control text not null default 'unlimited',
   status text not null default 'in_progress',
   result text,
+  elo_processed boolean not null default false,
   created_at timestamptz not null default now(),
   finished_at timestamptz
 );
 
+alter table public.game_history
+add column if not exists elo_processed boolean not null default false;
+
 alter table public.game_history enable row level security;
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text,
+  elo_rating integer not null default 1200 check (elo_rating between 100 and 4000),
+  games_played integer not null default 0 check (games_played >= 0),
+  wins integer not null default 0 check (wins >= 0),
+  losses integer not null default 0 check (losses >= 0),
+  draws integer not null default 0 check (draws >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+drop policy if exists "Users can view their own profile" on public.profiles;
+create policy "Users can view their own profile"
+on public.profiles
+for select
+using (auth.uid() = id);
+
+create or replace function public.create_profile_for_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name)
+  values (new.id, new.raw_user_meta_data ->> 'display_name')
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created_profile on auth.users;
+create trigger on_auth_user_created_profile
+after insert on auth.users
+for each row execute function public.create_profile_for_user();
+
+revoke all on function public.create_profile_for_user() from public;
+
+create or replace function public.get_my_profile()
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  profile public.profiles;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  insert into public.profiles (id) values (auth.uid()) on conflict (id) do nothing;
+  select * into profile from public.profiles where id = auth.uid();
+  return profile;
+end;
+$$;
+
+revoke all on function public.get_my_profile() from public;
+grant execute on function public.get_my_profile() to authenticated;
+
+insert into public.profiles (id)
+select distinct user_id from public.game_history
+on conflict (id) do nothing;
+
+create or replace function public.record_elo_result(p_game_id uuid, p_result text)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  game_record public.game_history;
+  player public.profiles;
+  opponent_rating integer := 1200;
+  k_factor integer;
+  expected numeric;
+  score numeric;
+  next_rating integer;
+begin
+  if p_result not in ('win', 'loss', 'draw') then
+    raise exception 'Invalid Elo result';
+  end if;
+
+  select * into game_record
+  from public.game_history
+  where id = p_game_id and user_id = auth.uid()
+  for update;
+
+  if not found then raise exception 'Game not found'; end if;
+  if game_record.status not in ('completed', 'draw') then raise exception 'Game is not completed'; end if;
+  if game_record.elo_processed then
+    select * into player from public.profiles where id = auth.uid();
+    return player;
+  end if;
+  if game_record.mode not in ('computer', 'private') then
+    update public.game_history set elo_processed = true where id = p_game_id;
+    select * into player from public.profiles where id = auth.uid();
+    return player;
+  end if;
+
+  insert into public.profiles (id) values (auth.uid()) on conflict (id) do nothing;
+  select * into player from public.profiles where id = auth.uid() for update;
+  k_factor := case when player.games_played < 30 then 32 else 16 end;
+  expected := 1.0 / (1.0 + power(10.0, (opponent_rating - player.elo_rating) / 400.0));
+  score := case p_result when 'win' then 1.0 when 'loss' then 0.0 else 0.5 end;
+  next_rating := greatest(100, least(4000, round(player.elo_rating + k_factor * (score - expected))::integer));
+
+  update public.profiles
+  set elo_rating = next_rating,
+      games_played = games_played + 1,
+      wins = wins + case when p_result = 'win' then 1 else 0 end,
+      losses = losses + case when p_result = 'loss' then 1 else 0 end,
+      draws = draws + case when p_result = 'draw' then 1 else 0 end,
+      updated_at = now()
+  where id = auth.uid()
+  returning * into player;
+
+  update public.game_history set elo_processed = true where id = p_game_id;
+  return player;
+end;
+$$;
+
+revoke all on function public.record_elo_result(uuid, text) from public;
+grant execute on function public.record_elo_result(uuid, text) to authenticated;
 
 do $$
 declare

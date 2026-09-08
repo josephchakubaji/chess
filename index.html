@@ -140,6 +140,7 @@
         </div>
         <div class="account-bar">
           <span id="accountLabel"></span>
+          <span id="ratingLabel" class="rating-label"></span>
           <button class="text-btn hidden" id="adminBtn" type="button">
             Admin activity
           </button>
@@ -157,6 +158,7 @@
           <div>
             <h2>Game history</h2>
             <p id="historySummary">Loading your games...</p>
+            <p id="ratingSummary" class="rating-summary"></p>
           </div>
           <button class="text-btn" id="historyBackBtn" type="button">
             Back to game choices
@@ -1070,6 +1072,8 @@
         historyBtn = $("historyBtn"),
         historyBackBtn = $("historyBackBtn"),
         historySummary = $("historySummary"),
+        ratingSummary = $("ratingSummary"),
+        ratingLabel = $("ratingLabel"),
         gameHistoryList = $("gameHistoryList");
       let authRegisterMode = false,
         currentUser = null,
@@ -1078,6 +1082,25 @@
         authSubmitting = false,
         authCooldownTimer = null;
       let activeGameHistoryId = null;
+
+      function getRatingLevel(rating) {
+        if (rating >= 1800) return "Expert";
+        if (rating >= 1500) return "Advanced";
+        if (rating >= 1200) return "Intermediate";
+        if (rating >= 900) return "Developing";
+        return "Beginner";
+      }
+
+      async function loadUserRating() {
+        if (!currentUser) return null;
+        const { data, error: ratingError } =
+          await supabaseClient.rpc("get_my_profile");
+        if (ratingError || !data) return null;
+        const level = getRatingLevel(data.elo_rating);
+        ratingLabel.textContent = `Elo ${data.elo_rating} · ${level}`;
+        ratingSummary.textContent = `Elo ${data.elo_rating} · ${level} · ${data.games_played} rated game${data.games_played === 1 ? "" : "s"} · ${data.wins}W / ${data.losses}L / ${data.draws}D`;
+        return data;
+      }
 
       async function beginGameHistory(mode, opponent, timeControl) {
         if (!currentUser) return;
@@ -1118,6 +1141,13 @@
           })
           .eq("id", historyId)
           .eq("user_id", currentUser.id);
+        if ((status === "completed" || status === "draw") && result) {
+          await supabaseClient.rpc("record_elo_result", {
+            p_game_id: historyId,
+            p_result: result,
+          });
+          await loadUserRating();
+        }
       }
 
       async function loadGameHistory() {
@@ -1139,6 +1169,7 @@
           return;
         }
         const games = data || [];
+        await loadUserRating();
         historySummary.textContent = `You have played ${games.length} game${games.length === 1 ? "" : "s"}.`;
         gameHistoryList.innerHTML = games.length
           ? games
@@ -1336,6 +1367,7 @@
         }
         accountLabel.textContent = `${getDisplayName()}${isAdminUser(user) ? " (Admin)" : ""}`;
         adminBtn.classList.toggle("hidden", !isAdminUser(user));
+        await loadUserRating();
         await startActivityPresence();
         restoreAppState();
         if (document.querySelector(".screen:not(.hidden)") === authScreen)
@@ -1486,10 +1518,14 @@
 
       function showGameOverModal(titleText, messageText) {
         if (activeGameHistoryId) {
-          const statusText = titleText.toLowerCase().includes("draw")
-            ? "draw"
-            : "completed";
-          void finishGameHistory(statusText, titleText);
+          const isDraw = titleText.toLowerCase().includes("draw");
+          let result = "draw";
+          if (!isDraw && (chess.in_checkmate() || clockExpired)) {
+            const winner = chess.turn() === "w" ? "b" : "w";
+            const userSide = computerMode ? "w" : color;
+            result = winner === userSide ? "win" : "loss";
+          }
+          void finishGameHistory(isDraw ? "draw" : "completed", result);
         }
         if ($("modalTitle")) $("modalTitle").textContent = titleText;
         if ($("modalMessage")) $("modalMessage").textContent = messageText;

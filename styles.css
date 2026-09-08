@@ -41,6 +41,16 @@
   flex-wrap: wrap;
 }
 
+.rating-label,
+.rating-summary {
+  color: var(--muted-color, #64748b);
+  font-weight: 700;
+}
+
+.rating-label {
+  margin-left: auto;
+}
+
 .admin-players {
   display: grid;
   gap: 0.65rem;
