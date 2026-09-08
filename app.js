@@ -427,7 +427,7 @@ function restoreGameState() {
     currentPuzzleStep = Number.isInteger(saved.currentPuzzleStep) ? saved.currentPuzzleStep : currentPuzzleStep;
     currentPuzzlePage = saved.currentPuzzlePage === "daily" ? "daily" : "practice";
     dailyPuzzle = saved.dailyPuzzle || dailyPuzzle;
-    activePuzzle = currentPuzzleIndex === -1 ? dailyPuzzle : null;
+    activePuzzle = saved.activePuzzle || (currentPuzzleIndex === -1 ? dailyPuzzle : null);
     selected = null;
     replaying = false;
 
@@ -2241,8 +2241,9 @@ $("hintBtn").onclick = () => {
 };
 
 $("retryPuzzleBtn").onclick = () => {
-  if (currentPuzzleIndex === -1 && (activePuzzle || dailyPuzzle)) {
-    loadCustomPuzzle(activePuzzle || dailyPuzzle);
+  if (currentPuzzleIndex === -1) {
+    if (activePuzzle) loadCustomPuzzle(activePuzzle);
+    else showToast("This daily puzzle is no longer loaded. Please select it again from the archive.");
   } else {
     loadPuzzle(currentPuzzleIndex);
   }
@@ -2275,8 +2276,8 @@ $("resetPuzzlesProgressBtn").onclick = () => {
 $("modalNewGameBtn").onclick = () => {
   hideGameOverModal();
   if (puzzleMode) {
-    if (currentPuzzleIndex === -1 && (activePuzzle || dailyPuzzle)) {
-      loadCustomPuzzle(activePuzzle || dailyPuzzle);
+    if (currentPuzzleIndex === -1 && activePuzzle) {
+      loadCustomPuzzle(activePuzzle);
     } else {
       const nextIdx = (currentPuzzleIndex + 1) % PUZZLES.length;
       loadPuzzle(nextIdx);
