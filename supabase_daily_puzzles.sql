@@ -35,28 +35,18 @@ execute function public.set_daily_puzzles_updated_at();
 alter table public.daily_puzzles enable row level security;
 
 drop policy if exists "Daily puzzles are publicly readable" on public.daily_puzzles;
-create policy "Daily puzzles are publicly readable"
+drop policy if exists "Authenticated users can read daily puzzles" on public.daily_puzzles;
+create policy "Authenticated users can read daily puzzles"
 on public.daily_puzzles
 for select
-using (true);
+using (auth.role() = 'authenticated');
 
 drop policy if exists "Daily puzzles can be inserted by app clients" on public.daily_puzzles;
-create policy "Daily puzzles can be inserted by app clients"
-on public.daily_puzzles
-for insert
-with check (true);
-
 drop policy if exists "Daily puzzles can be updated by app clients" on public.daily_puzzles;
-create policy "Daily puzzles can be updated by app clients"
-on public.daily_puzzles
-for update
-using (true);
-
 drop policy if exists "Daily puzzles can be deleted by app clients" on public.daily_puzzles;
-create policy "Daily puzzles can be deleted by app clients"
-on public.daily_puzzles
-for delete
-using (true);
+
+-- Daily puzzle writes are server-only. Use the save-daily-puzzle edge function
+-- with its service-role key; never expose that key in browser code.
 
 create table if not exists public.game_history (
   id uuid primary key default gen_random_uuid(),

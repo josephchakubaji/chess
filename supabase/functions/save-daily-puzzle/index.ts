@@ -105,6 +105,21 @@ Deno.serve(async (req) => {
 
     const todayKey = new Date().toISOString().slice(0, 10);
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const authorization = req.headers.get("Authorization");
+    const accessToken = authorization?.replace(/^Bearer\s+/i, "");
+    if (!accessToken) {
+      return Response.json(
+        { error: "Authentication required" },
+        { status: 401, headers: corsHeaders },
+      );
+    }
+    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+    if (userError || !userData.user) {
+      return Response.json(
+        { error: "Invalid authentication token" },
+        { status: 401, headers: corsHeaders },
+      );
+    }
 
     // If request contains already-fetched puzzle payload from the client
     let incomingPuzzle: any = null;

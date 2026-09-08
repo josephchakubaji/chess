@@ -1671,11 +1671,10 @@
             source: "lichess-api",
           };
 
-          const { data, error } = await supabaseClient
-            .from("daily_puzzles")
-            .upsert([row], { onConflict: "date" })
-            .select()
-            .maybeSingle();
+          const { data, error } = await supabaseClient.functions.invoke(
+            "save-daily-puzzle",
+            { body: { puzzle: { ...puzzle, ...row } } },
+          );
 
           if (error) {
             if (
@@ -1689,8 +1688,8 @@
             return;
           }
 
-          if (data) {
-            const savedPuzzle = rowToDailyPuzzle(data);
+          if (data?.puzzle) {
+            const savedPuzzle = rowToDailyPuzzle(data.puzzle);
             if (savedPuzzle.date === puzzle.date) {
               dailyPuzzle = savedPuzzle;
               cacheDailyPuzzle(savedPuzzle, savedPuzzle.date);
@@ -1716,16 +1715,6 @@
           '<p class="daily-archive-empty">Loading saved daily puzzles...</p>';
 
         try {
-          // Purge any previously seeded practice puzzles from daily_puzzles table if permitted
-          try {
-            await supabaseClient
-              .from(DAILY_PUZZLE_TABLE)
-              .delete()
-              .neq("source", "lichess-api");
-          } catch (_cleanupErr) {
-            // Silently ignore if client delete policy is not yet executed
-          }
-
           let { data, error } = await supabaseClient
             .from(DAILY_PUZZLE_TABLE)
             .select(
