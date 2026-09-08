@@ -919,6 +919,8 @@
       let reviewMode = false,
         reviewMoves = [],
         reviewPly = 0,
+        reviewInitialFen = null,
+        gameInitialFen = new Chess().fen(),
         reviewLiveFen = null,
         reviewLiveLastMove = null,
         reviewSummaryText = "",
@@ -2347,6 +2349,7 @@
           : "Pass & Play";
 
         chess.reset();
+        gameInitialFen = chess.fen();
         lastMove = null;
         moveHistory = [];
         undoStack = [];
@@ -2377,6 +2380,7 @@
           : `Computer: ${level}`;
 
         chess.reset();
+        gameInitialFen = chess.fen();
         lastMove = null;
         moveHistory = [];
         undoStack = [];
@@ -2521,6 +2525,11 @@
 
       function applyReviewPosition(targetPly) {
         const replayChess = new Chess();
+        if (reviewInitialFen && !replayChess.load(reviewInitialFen)) {
+          connection.textContent =
+            "This game cannot be reconstructed for review.";
+          return;
+        }
         let applied = 0;
         let appliedMove = null;
         for (let i = 0; i < targetPly && i < reviewMoves.length; i++) {
@@ -2548,6 +2557,7 @@
         }
 
         reviewLiveFen = chess.fen();
+        reviewInitialFen = gameInitialFen;
         reviewLiveLastMove = lastMove ? { ...lastMove } : null;
         reviewMoves = [...moveHistory];
         reviewSummaryText = getGameSummaryText();
@@ -2563,6 +2573,7 @@
 
       function exitReviewMode() {
         if (reviewLiveFen) chess.load(reviewLiveFen);
+        reviewInitialFen = null;
         lastMove = reviewLiveLastMove;
         reviewMode = false;
         replaying = false;
@@ -2711,6 +2722,7 @@
           ? `Connected as ${color === "w" ? "White" : "Black"} (${tc})`
           : `Connected as ${color === "w" ? "White" : "Black"}`;
         chess.reset();
+        gameInitialFen = chess.fen();
         lastMove = null;
         moveHistory = [];
         undoStack = [];
