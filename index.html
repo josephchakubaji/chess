@@ -143,10 +143,26 @@
           <button class="text-btn hidden" id="adminBtn" type="button">
             Admin activity
           </button>
+          <button class="text-btn" id="historyBtn" type="button">
+            Game history
+          </button>
           <button class="text-btn" id="signOutBtn" type="button">
             Sign out
           </button>
         </div>
+      </section>
+
+      <section class="screen hidden" id="historyScreen">
+        <div class="admin-header">
+          <div>
+            <h2>Game history</h2>
+            <p id="historySummary">Loading your games...</p>
+          </div>
+          <button class="text-btn" id="historyBackBtn" type="button">
+            Back to game choices
+          </button>
+        </div>
+        <div id="gameHistoryList" class="admin-players"></div>
       </section>
 
       <section class="screen hidden" id="dailyPuzzleScreen">
@@ -937,6 +953,7 @@
         error = $("roomError");
       const authScreen = $("authScreen"),
         adminScreen = $("adminScreen"),
+        historyScreen = $("historyScreen"),
         start = $("startScreen"),
         playerMode = $("playerModeScreen"),
         computer = $("computerScreen"),
@@ -1032,16 +1049,99 @@
         adminBtn = $("adminBtn"),
         signOutBtn = $("signOutBtn"),
         adminBackBtn = $("adminBackBtn"),
-        adminPlayers = $("adminPlayers");
+        adminPlayers = $("adminPlayers"),
+        historyBtn = $("historyBtn"),
+        historyBackBtn = $("historyBackBtn"),
+        historySummary = $("historySummary"),
+        gameHistoryList = $("gameHistoryList");
       let authRegisterMode = false,
         currentUser = null,
         activityChannel = null,
         activityPresence = {};
+      let activeGameHistoryId = null;
+
+      async function beginGameHistory(mode, opponent, timeControl) {
+        if (!currentUser) return;
+        if (activeGameHistoryId)
+          await finishGameHistory("abandoned", "New game started");
+        const { data, error: historyError } = await supabaseClient
+          .from("game_history")
+          .insert({
+            user_id: currentUser.id,
+            mode,
+            opponent: opponent || "Unknown opponent",
+            time_control: timeControl || "unlimited",
+            status: "in_progress",
+          })
+          .select("id")
+          .maybeSingle();
+        if (historyError) {
+          console.warn(
+            "Could not start game history record:",
+            historyError.message,
+          );
+          activeGameHistoryId = null;
+          return;
+        }
+        activeGameHistoryId = data?.id || null;
+      }
+
+      async function finishGameHistory(status, result) {
+        if (!activeGameHistoryId) return;
+        const historyId = activeGameHistoryId;
+        activeGameHistoryId = null;
+        await supabaseClient
+          .from("game_history")
+          .update({
+            status,
+            result: result || null,
+            finished_at: new Date().toISOString(),
+          })
+          .eq("id", historyId)
+          .eq("user_id", currentUser.id);
+      }
+
+      async function loadGameHistory() {
+        if (!currentUser) return;
+        gameHistoryList.innerHTML =
+          '<p class="daily-archive-empty">Loading your games...</p>';
+        const { data, error: historyError } = await supabaseClient
+          .from("game_history")
+          .select(
+            "id,mode,opponent,time_control,status,result,created_at,finished_at",
+          )
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (historyError) {
+          historySummary.textContent = "Game history is not available yet.";
+          gameHistoryList.innerHTML =
+            '<p class="daily-archive-empty">Run the game history SQL setup first.</p>';
+          return;
+        }
+        const games = data || [];
+        historySummary.textContent = `You have played ${games.length} game${games.length === 1 ? "" : "s"}.`;
+        gameHistoryList.innerHTML = games.length
+          ? games
+              .map(
+                (gameRecord) => `
+          <div class="admin-player-row">
+            <strong>${String(gameRecord.mode || "Game").replace(/[&<>"']/g, "")}</strong>
+            <span>vs ${String(gameRecord.opponent || "Unknown").replace(/[&<>"']/g, "")}</span>
+            <span>${String(gameRecord.status || "unknown").replace(/[&<>"']/g, "")}${gameRecord.result ? ` (${String(gameRecord.result).replace(/[&<>"']/g, "")})` : ""}</span>
+            <small>${gameRecord.created_at ? new Date(gameRecord.created_at).toLocaleString() : ""}</small>
+          </div>
+        `,
+              )
+              .join("")
+          : '<p class="daily-archive-empty">No games played yet.</p>';
+      }
 
       function show(screen) {
         [
           authScreen,
           adminScreen,
+          historyScreen,
           start,
           playerMode,
           computer,
@@ -1343,6 +1443,12 @@
       }
 
       function showGameOverModal(titleText, messageText) {
+        if (activeGameHistoryId) {
+          const statusText = titleText.toLowerCase().includes("draw")
+            ? "draw"
+            : "completed";
+          void finishGameHistory(statusText, titleText);
+        }
         if ($("modalTitle")) $("modalTitle").textContent = titleText;
         if ($("modalMessage")) $("modalMessage").textContent = messageText;
         if ($("modalNewGameBtn"))
@@ -2574,6 +2680,7 @@
         selected = null;
         draw();
         show(game);
+        void beginGameHistory("pass_and_play", "Local opponent", tc);
         if (timedMode) startClock();
       }
 
@@ -2605,6 +2712,7 @@
         selected = null;
         draw();
         show(game);
+        void beginGameHistory("computer", `Computer (${level})`, tc);
         if (timedMode) startClock();
       }
 
@@ -2947,6 +3055,7 @@
         selected = null;
         draw();
         show(game);
+        void beginGameHistory("private", "Private opponent", tc);
         if (timedMode) startClock();
       }
 
@@ -3155,6 +3264,11 @@
         show(adminScreen);
       };
       adminBackBtn.onclick = () => show(start);
+      historyBtn.onclick = async () => {
+        await loadGameHistory();
+        show(historyScreen);
+      };
+      historyBackBtn.onclick = () => show(start);
 
       document.querySelectorAll(".difficulty-option").forEach((button) => {
         button.onclick = () => {
@@ -3389,6 +3503,8 @@
       $("leaveBtn").onclick = () => leaveBtnClick();
 
       function leaveBtnClick() {
+        if (activeGameHistoryId)
+          void finishGameHistory("abandoned", "Player left the game");
         if (puzzleMode) {
           if (currentPuzzlePage === "daily" || currentPuzzleIndex === -1) {
             renderDailyPuzzleBanner();
