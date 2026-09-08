@@ -45,7 +45,57 @@
         </button>
       </h1>
 
-      <section class="screen" id="startScreen">
+      <section class="screen" id="authScreen">
+        <h2 id="authTitle">Sign in to Chess</h2>
+        <p id="authDescription">
+          Create an account or sign in to play and appear in the player activity
+          list.
+        </p>
+        <form id="authForm" class="auth-form">
+          <label for="authEmail">Email</label>
+          <input id="authEmail" type="email" autocomplete="email" required />
+          <label for="authPassword">Password</label>
+          <input
+            id="authPassword"
+            type="password"
+            autocomplete="current-password"
+            minlength="6"
+            required
+          />
+          <label id="authNameLabel" class="hidden" for="authName"
+            >Display name</label
+          >
+          <input
+            id="authName"
+            class="hidden"
+            type="text"
+            autocomplete="name"
+            maxlength="40"
+          />
+          <button class="btn" id="authSubmitBtn" type="submit">Sign in</button>
+          <p id="authMessage" class="auth-message" role="status"></p>
+        </form>
+        <button class="text-btn" id="authModeBtn" type="button">
+          Need an account? Register
+        </button>
+      </section>
+
+      <section class="screen hidden" id="adminScreen">
+        <div class="admin-header">
+          <div>
+            <h2>Player activity</h2>
+            <p>Authenticated players currently connected to Chess.</p>
+          </div>
+          <button class="text-btn" id="adminBackBtn" type="button">
+            Back to game choices
+          </button>
+        </div>
+        <div id="adminPlayers" class="admin-players">
+          <p class="daily-archive-empty">Loading player activity...</p>
+        </div>
+      </section>
+
+      <section class="screen hidden" id="startScreen">
         <h2>Choose your game</h2>
         <p>
           Select your preferred game mode. Play against computer AI, practice
@@ -86,6 +136,15 @@
               >Solve 24 tactical puzzles (Beginner, Intermediate, Advanced) to
               improve!</small
             >
+          </button>
+        </div>
+        <div class="account-bar">
+          <span id="accountLabel"></span>
+          <button class="text-btn hidden" id="adminBtn" type="button">
+            Admin activity
+          </button>
+          <button class="text-btn" id="signOutBtn" type="button">
+            Sign out
           </button>
         </div>
       </section>
@@ -875,7 +934,9 @@
       const board = $("board"),
         status = $("status"),
         error = $("roomError");
-      const start = $("startScreen"),
+      const authScreen = $("authScreen"),
+        adminScreen = $("adminScreen"),
+        start = $("startScreen"),
         playerMode = $("playerModeScreen"),
         computer = $("computerScreen"),
         timed = $("timedScreen"),
@@ -956,9 +1017,30 @@
       const id = crypto.randomUUID();
       const ACTIVE_SCREEN_KEY = "chess_active_screen";
       const GAME_STATE_KEY = "chess_game_state";
+      const authForm = $("authForm"),
+        authTitle = $("authTitle"),
+        authDescription = $("authDescription"),
+        authEmail = $("authEmail"),
+        authPassword = $("authPassword"),
+        authName = $("authName"),
+        authNameLabel = $("authNameLabel"),
+        authSubmitBtn = $("authSubmitBtn"),
+        authModeBtn = $("authModeBtn"),
+        authMessage = $("authMessage"),
+        accountLabel = $("accountLabel"),
+        adminBtn = $("adminBtn"),
+        signOutBtn = $("signOutBtn"),
+        adminBackBtn = $("adminBackBtn"),
+        adminPlayers = $("adminPlayers");
+      let authRegisterMode = false,
+        currentUser = null,
+        activityChannel = null,
+        activityPresence = {};
 
       function show(screen) {
         [
+          authScreen,
+          adminScreen,
           start,
           playerMode,
           computer,
@@ -971,6 +1053,7 @@
         ].forEach((item) => item.classList.add("hidden"));
         screen.classList.remove("hidden");
         saveAppState(screen.id);
+        void updateActivityPresence();
       }
 
       function showToast(message) {
@@ -981,6 +1064,140 @@
         toast.textContent = message;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 2500);
+      }
+
+      function isAdminUser(user = currentUser) {
+        return user?.user_metadata?.role === "admin";
+      }
+
+      function getDisplayName(user = currentUser) {
+        return user?.user_metadata?.display_name || user?.email || "Player";
+      }
+
+      function getActivityLabel() {
+        if (game && !game.classList.contains("hidden")) {
+          if (puzzleMode)
+            return currentPuzzlePage === "daily"
+              ? "Playing a daily puzzle"
+              : "Playing practice puzzles";
+          if (computerMode) return "Playing computer";
+          if (privateRoom) return "Playing in a private room";
+          return "Playing pass and play";
+        }
+        if (
+          !puzzleScreen.classList.contains("hidden") ||
+          !dailyPuzzleScreen.classList.contains("hidden")
+        )
+          return "Browsing puzzles";
+        if (
+          !playerMode.classList.contains("hidden") ||
+          !room.classList.contains("hidden") ||
+          !lobby.classList.contains("hidden")
+        )
+          return "Choosing player mode";
+        if (
+          !computer.classList.contains("hidden") ||
+          !timed.classList.contains("hidden")
+        )
+          return "Choosing game settings";
+        return "On home screen";
+      }
+
+      function renderAdminPlayers() {
+        if (!adminPlayers) return;
+        const entries = Object.values(activityPresence).flatMap(
+          (items) => items || [],
+        );
+        if (!entries.length) {
+          adminPlayers.innerHTML =
+            '<p class="daily-archive-empty">No authenticated players are currently online.</p>';
+          return;
+        }
+        adminPlayers.innerHTML = entries
+          .map(
+            (entry) => `
+          <div class="admin-player-row">
+            <strong>${String(entry.displayName || "Player").replace(/[&<>"']/g, "")}</strong>
+            <span>${String(entry.activity || "Online").replace(/[&<>"']/g, "")}</span>
+            <small>${entry.updatedAt ? new Date(entry.updatedAt).toLocaleTimeString() : ""}</small>
+          </div>
+        `,
+          )
+          .join("");
+      }
+
+      async function updateActivityPresence() {
+        if (!activityChannel || !currentUser) return;
+        await activityChannel.track({
+          userId: currentUser.id,
+          displayName: getDisplayName(),
+          activity: getActivityLabel(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      async function startActivityPresence() {
+        if (activityChannel)
+          await supabaseClient.removeChannel(activityChannel);
+        activityChannel = supabaseClient.channel("chess-active-players", {
+          config: { presence: { key: currentUser.id } },
+        });
+        activityChannel.on("presence", { event: "sync" }, () => {
+          activityPresence = activityChannel.presenceState();
+          renderAdminPlayers();
+        });
+        await activityChannel.subscribe(async (subscription) => {
+          if (subscription === "SUBSCRIBED") await updateActivityPresence();
+        });
+      }
+
+      function setAuthMessage(message, isError = false) {
+        authMessage.textContent = message;
+        authMessage.classList.toggle("error", isError);
+      }
+
+      function updateAuthMode() {
+        authRegisterMode = !authRegisterMode;
+        authTitle.textContent = authRegisterMode
+          ? "Create your Chess account"
+          : "Sign in to Chess";
+        authDescription.textContent = authRegisterMode
+          ? "Register to play and appear in the player activity list."
+          : "Sign in to play and appear in the player activity list.";
+        authName.classList.toggle("hidden", !authRegisterMode);
+        authNameLabel.classList.toggle("hidden", !authRegisterMode);
+        authName.required = authRegisterMode;
+        authSubmitBtn.textContent = authRegisterMode ? "Register" : "Sign in";
+        authModeBtn.textContent = authRegisterMode
+          ? "Already have an account? Sign in"
+          : "Need an account? Register";
+        setAuthMessage("");
+      }
+
+      async function initializeAuth() {
+        const { data } = await supabaseClient.auth.getSession();
+        await handleAuthChange(data.session?.user || null);
+        supabaseClient.auth.onAuthStateChange((_event, session) => {
+          void handleAuthChange(session?.user || null);
+        });
+      }
+
+      async function handleAuthChange(user) {
+        currentUser = user;
+        if (!user) {
+          if (activityChannel)
+            await supabaseClient.removeChannel(activityChannel);
+          activityChannel = null;
+          show(authScreen);
+          return;
+        }
+        accountLabel.textContent = `${getDisplayName()}${isAdminUser(user) ? " (Admin)" : ""}`;
+        adminBtn.classList.toggle("hidden", !isAdminUser(user));
+        await startActivityPresence();
+        restoreAppState();
+        if (document.querySelector(".screen:not(.hidden)") === authScreen)
+          show(start);
+        await updateActivityPresence();
       }
 
       function saveAppState(screenId) {
@@ -2898,6 +3115,45 @@
         selectedTimeControl = tc;
       });
 
+      authModeBtn.onclick = updateAuthMode;
+      authForm.onsubmit = async (event) => {
+        event.preventDefault();
+        authSubmitBtn.disabled = true;
+        setAuthMessage(
+          authRegisterMode ? "Creating account..." : "Signing in...",
+        );
+        const email = authEmail.value.trim();
+        const password = authPassword.value;
+        const result = authRegisterMode
+          ? await supabaseClient.auth.signUp({
+              email,
+              password,
+              options: {
+                data: { display_name: authName.value.trim(), role: "user" },
+              },
+            })
+          : await supabaseClient.auth.signInWithPassword({ email, password });
+        authSubmitBtn.disabled = false;
+        if (result.error) {
+          setAuthMessage(result.error.message, true);
+          return;
+        }
+        setAuthMessage(
+          authRegisterMode && !result.data.session
+            ? "Check your email to confirm your account."
+            : "",
+        );
+      };
+
+      signOutBtn.onclick = async () => {
+        await supabaseClient.auth.signOut();
+      };
+      adminBtn.onclick = () => {
+        renderAdminPlayers();
+        show(adminScreen);
+      };
+      adminBackBtn.onclick = () => show(start);
+
       document.querySelectorAll(".difficulty-option").forEach((button) => {
         button.onclick = () => {
           document
@@ -3190,19 +3446,21 @@
 
       syncMoveHintsToggles();
       buildBoard();
-      restoreAppState();
-      const launchMode = new URLSearchParams(window.location.search).get(
-        "mode",
-      );
-      if (launchMode === "computer") {
-        show(computer);
-      } else if (launchMode === "player") {
-        show(playerMode);
-      } else if (launchMode === "puzzles") {
-        renderPuzzleGrid();
-        show(puzzleScreen);
-      }
-      joinRoomFromLink();
+      initializeAuth().then(() => {
+        if (!currentUser) return;
+        const launchMode = new URLSearchParams(window.location.search).get(
+          "mode",
+        );
+        if (launchMode === "computer") {
+          show(computer);
+        } else if (launchMode === "player") {
+          show(playerMode);
+        } else if (launchMode === "puzzles") {
+          renderPuzzleGrid();
+          show(puzzleScreen);
+        }
+        return joinRoomFromLink();
+      });
       updateDailyTimer();
       if (!dailyTimerInterval) {
         dailyTimerInterval = setInterval(updateDailyTimer, 1000);

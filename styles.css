@@ -1,3 +1,71 @@
+/* Authentication and admin activity */
+.auth-form {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 28rem;
+  margin: 1.5rem auto 1rem;
+  text-align: left;
+}
+
+.auth-form input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 0.5rem;
+  background: var(--surface-color, #fff);
+  color: inherit;
+}
+
+.auth-message {
+  min-height: 1.4rem;
+  margin: 0.25rem 0 0;
+  text-align: center;
+}
+
+.auth-message.error {
+  color: #b91c1c;
+}
+
+.account-bar,
+.admin-header,
+.admin-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.account-bar {
+  margin-top: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.admin-players {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.5rem;
+}
+
+.admin-player-row {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 0.5rem;
+  background: var(--surface-color, #fff);
+}
+
+.admin-player-row span {
+  flex: 1;
+  color: var(--muted-color, #64748b);
+}
+
+@media (max-width: 600px) {
+  .admin-header,
+  .admin-player-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 :root {
   --ink: #17212b;
   --muted: #65727e;
