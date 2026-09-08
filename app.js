@@ -304,20 +304,6 @@ function saveAppState(gameId = "default") {
     // 1. Save locally to localStorage
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
 
-    // 2. Sync to Supabase Database if playing in a private room
-    if (privateRoom && channel && host) {
-      supabaseClient
-        .from("rooms")
-        .upsert({
-          room_code: codeDisplay.textContent,
-          fen: chess.fen(),
-          move_history: moveHistory,
-          updated_at: new Date()
-        })
-        .then(({ error }) => {
-          if (error) console.error("Supabase Save Error:", error);
-        });
-    }
   } catch (err) {
     console.warn("Could not save app state to storage:", err);
   }
@@ -2132,17 +2118,6 @@ async function joinPrivate(code, isHost) {
 async function joinRoomFromLink() {
   const code = new URLSearchParams(window.location.search).get("room");
   if (!code || !/^[A-Z0-9]{6}$/i.test(code)) return;
-  const result = await supabaseClient
-    .from("chess_rooms")
-    .select("code")
-    .eq("code", code.toUpperCase())
-    .maybeSingle();
-  if (result.error || !result.data) {
-    error.textContent = "That room link is invalid or the room has closed.";
-    show(room);
-    clearRoomLink();
-    return;
-  }
   await joinPrivate(code.toUpperCase(), false);
 }
 
@@ -2296,11 +2271,6 @@ document.querySelectorAll(".side-option").forEach((button) => button.onclick = (
 $("createRoomBtn").onclick = async () => {
   error.textContent = "";
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
-  try {
-    await supabaseClient.from("chess_rooms").insert({ code });
-  } catch (e) {
-    console.log("Supabase DB insert optional fallback:", e);
-  }
   joinPrivate(code, true);
 };
 

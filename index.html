@@ -1189,7 +1189,7 @@
       }
 
       function isAdminUser(user = currentUser) {
-        return user?.user_metadata?.role === "admin";
+        return user?.app_metadata?.role === "admin";
       }
 
       function getDisplayName(user = currentUser) {
@@ -1262,7 +1262,7 @@
         if (activityChannel)
           await supabaseClient.removeChannel(activityChannel);
         activityChannel = supabaseClient.channel("chess-active-players", {
-          config: { presence: { key: currentUser.id } },
+          config: { private: true, presence: { key: currentUser.id } },
         });
         activityChannel.on("presence", { event: "sync" }, () => {
           activityPresence = activityChannel.presenceState();
@@ -1673,7 +1673,7 @@
 
           const { data, error } = await supabaseClient.functions.invoke(
             "save-daily-puzzle",
-            { body: { puzzle: { ...puzzle, ...row } } },
+            { body: {} },
           );
 
           if (error) {
@@ -3142,7 +3142,11 @@
         show(lobby);
 
         channel = supabaseClient.channel(`chess-room-${code}`, {
-          config: { presence: { key: id }, broadcast: { self: true } },
+          config: {
+            private: true,
+            presence: { key: id },
+            broadcast: { self: true },
+          },
         });
 
         channel
@@ -3217,18 +3221,6 @@
       async function joinRoomFromLink() {
         const code = new URLSearchParams(window.location.search).get("room");
         if (!code || !/^[A-Z0-9]{6}$/i.test(code)) return;
-        const result = await supabaseClient
-          .from("chess_rooms")
-          .select("code")
-          .eq("code", code.toUpperCase())
-          .maybeSingle();
-        if (result.error || !result.data) {
-          error.textContent =
-            "That room link is invalid or the room has closed.";
-          show(room);
-          clearRoomLink();
-          return;
-        }
         await joinPrivate(code.toUpperCase(), false);
       }
 
@@ -3277,7 +3269,7 @@
                 email,
                 password,
                 options: {
-                  data: { display_name: authName.value.trim(), role: "user" },
+                  data: { display_name: authName.value.trim() },
                   emailRedirectTo: AUTH_REDIRECT_URL,
                 },
               })
@@ -3482,11 +3474,6 @@
       $("createRoomBtn").onclick = async () => {
         error.textContent = "";
         const code = Math.random().toString(36).slice(2, 8).toUpperCase();
-        try {
-          await supabaseClient.from("chess_rooms").insert({ code });
-        } catch (e) {
-          console.log("Supabase DB insert optional fallback:", e);
-        }
         joinPrivate(code, true);
       };
 

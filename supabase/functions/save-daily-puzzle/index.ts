@@ -3,12 +3,20 @@ import { Chess } from "npm:chess.js@1.0.0";
 
 const LICHESS_DAILY_API = "https://lichess.org/api/puzzle/daily";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, accept, origin, x-requested-with, *",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
-};
+function getCorsHeaders(origin: string | null) {
+  const allowedOrigins = (Deno.env.get("APP_ORIGINS") || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const allowedOrigin = origin && allowedOrigins.includes(origin) ? origin : "null";
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, accept, origin, x-requested-with",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
 
 type LichessDaily = {
   game?: {
@@ -79,6 +87,7 @@ function buildPlayerPosition(initialFen: string, solution: string[]) {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("Origin"));
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders, status: 200 });
   }
@@ -92,9 +101,7 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseKey =
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
-      Deno.env.get("SUPABASE_ANON_KEY");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !supabaseKey) {
       return Response.json(
@@ -121,40 +128,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // If request contains already-fetched puzzle payload from the client
-    let incomingPuzzle: any = null;
-    if (req.method === "POST") {
-      try {
-        const body = await req.json();
-        if (body?.puzzle && body.puzzle.source === "lichess-api") {
-          incomingPuzzle = body.puzzle;
-        }
-      } catch (_e) {
-        // Ignore empty body
-      }
-    }
-
     let row: any = null;
 
-    if (incomingPuzzle) {
-      row = {
-        date: incomingPuzzle.date || todayKey,
-        puzzle_id:
-          incomingPuzzle.id || `lichess_daily_${incomingPuzzle.date || todayKey}`,
-        source_puzzle_id:
-          incomingPuzzle.sourcePuzzleId || incomingPuzzle.id || null,
-        title: incomingPuzzle.title || "Daily Tactical Shot",
-        category: incomingPuzzle.category || "Advanced",
-        goal: incomingPuzzle.goal || "Find the best move!",
-        fen: incomingPuzzle.fen,
-        solution: incomingPuzzle.solution || [],
-        hint: incomingPuzzle.hint || null,
-        rating: incomingPuzzle.rating || null,
-        themes: incomingPuzzle.themes || [],
-        source: "lichess-api",
-      };
-    } else {
-      // Check if daily puzzle already exists in DB before fetching
+    {
+      // Check if daily puzzle already exists in DB before fetching.
       const existing = await supabase
         .from("daily_puzzles")
         .select(
@@ -219,7 +196,6 @@ Deno.serve(async (req) => {
         rating: data.puzzle?.rating || null,
         themes: data.puzzle?.themes || [],
         source: "lichess-api",
-        raw_payload: data,
       };
     }
 

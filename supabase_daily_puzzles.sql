@@ -34,16 +34,24 @@ execute function public.set_daily_puzzles_updated_at();
 
 alter table public.daily_puzzles enable row level security;
 
-drop policy if exists "Daily puzzles are publicly readable" on public.daily_puzzles;
-drop policy if exists "Authenticated users can read daily puzzles" on public.daily_puzzles;
+do $$
+declare
+  policy_record record;
+begin
+  for policy_record in
+    select policyname
+    from pg_policies
+    where schemaname = 'public' and tablename = 'daily_puzzles'
+  loop
+    execute format('drop policy if exists %I on public.daily_puzzles', policy_record.policyname);
+  end loop;
+end
+$$;
+
 create policy "Authenticated users can read daily puzzles"
 on public.daily_puzzles
 for select
 using (auth.role() = 'authenticated');
-
-drop policy if exists "Daily puzzles can be inserted by app clients" on public.daily_puzzles;
-drop policy if exists "Daily puzzles can be updated by app clients" on public.daily_puzzles;
-drop policy if exists "Daily puzzles can be deleted by app clients" on public.daily_puzzles;
 
 -- Daily puzzle writes are server-only. Use the save-daily-puzzle edge function
 -- with its service-role key; never expose that key in browser code.
@@ -61,6 +69,20 @@ create table if not exists public.game_history (
 );
 
 alter table public.game_history enable row level security;
+
+do $$
+declare
+  policy_record record;
+begin
+  for policy_record in
+    select policyname
+    from pg_policies
+    where schemaname = 'public' and tablename = 'game_history'
+  loop
+    execute format('drop policy if exists %I on public.game_history', policy_record.policyname);
+  end loop;
+end
+$$;
 
 drop policy if exists "Users can view their own game history" on public.game_history;
 create policy "Users can view their own game history"
@@ -80,6 +102,37 @@ on public.game_history
 for update
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- Remove previously stored third-party payloads that may contain metadata.
+update public.daily_puzzles set raw_payload = null where raw_payload is not null;
+
+-- Private rooms are coordinated through authenticated Realtime channels.
+-- Keep the legacy table inaccessible through the public API.
+do $$
+declare
+  policy_record record;
+begin
+  if to_regclass('public.chess_rooms') is not null then
+    alter table public.chess_rooms enable row level security;
+    for policy_record in
+      select policyname
+      from pg_policies
+      where schemaname = 'public' and tablename = 'chess_rooms'
+    loop
+      execute format('drop policy if exists %I on public.chess_rooms', policy_record.policyname);
+    end loop;
+  end if;
+end
+$$;
+
+-- Realtime channels used by the app are private and require an authenticated user.
+drop policy if exists "Authenticated users can use chess realtime channels" on realtime.messages;
+create policy "Authenticated users can use chess realtime channels"
+on realtime.messages
+for all
+to authenticated
+using (realtime.topic() like 'chess-%')
+with check (realtime.topic() like 'chess-%');
 
 -- One-time cleanup query: purge any seeded practice puzzles from the daily table
 delete from public.daily_puzzles where source != 'lichess-api';
