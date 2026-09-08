@@ -703,7 +703,10 @@
         SUPABASE_URL,
         SUPABASE_KEY,
       );
-      const AUTH_REDIRECT_URL = `${window.location.origin}${window.location.pathname}`;
+      // Set window.CHESS_APP_URL before this script when deploying to a fixed domain.
+      const AUTH_REDIRECT_URL =
+        window.CHESS_APP_URL ||
+        `${window.location.origin}${window.location.pathname}`;
 
       const symbols = {
         p: "♟",
@@ -1257,6 +1260,26 @@
         authMessage.classList.toggle("error", isError);
       }
 
+      function showAuthRedirectError() {
+        const params = new URLSearchParams(window.location.hash.slice(1));
+        const errorCode = params.get("error_code");
+        const errorDescription = params.get("error_description");
+        if (!errorCode && !errorDescription) return;
+
+        const message =
+          errorCode === "otp_expired"
+            ? "This email link has expired. Register again or request a new confirmation email."
+            : decodeURIComponent(
+                errorDescription || "The email link could not be verified.",
+              ).replace(/\+/g, " ");
+        setAuthMessage(message, true);
+        window.history.replaceState(
+          {},
+          document.title,
+          `${window.location.pathname}${window.location.search}`,
+        );
+      }
+
       function updateAuthMode() {
         authRegisterMode = !authRegisterMode;
         authTitle.textContent = authRegisterMode
@@ -1276,6 +1299,7 @@
       }
 
       async function initializeAuth() {
+        showAuthRedirectError();
         const { data } = await supabaseClient.auth.getSession();
         await handleAuthChange(data.session?.user || null);
         supabaseClient.auth.onAuthStateChange((_event, session) => {
