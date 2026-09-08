@@ -1060,7 +1060,9 @@
       let authRegisterMode = false,
         currentUser = null,
         activityChannel = null,
-        activityPresence = {};
+        activityPresence = {},
+        authSubmitting = false,
+        authCooldownTimer = null;
       let activeGameHistoryId = null;
 
       async function beginGameHistory(mode, opponent, timeControl) {
@@ -3252,32 +3254,61 @@
       authModeBtn.onclick = updateAuthMode;
       authForm.onsubmit = async (event) => {
         event.preventDefault();
+        if (authSubmitting) return;
+        if (authCooldownTimer) {
+          setAuthMessage("Please wait before trying again.", true);
+          return;
+        }
+        authSubmitting = true;
         authSubmitBtn.disabled = true;
         setAuthMessage(
           authRegisterMode ? "Creating account..." : "Signing in...",
         );
         const email = authEmail.value.trim();
         const password = authPassword.value;
-        const result = authRegisterMode
-          ? await supabaseClient.auth.signUp({
-              email,
-              password,
-              options: {
-                data: { display_name: authName.value.trim(), role: "user" },
-                emailRedirectTo: AUTH_REDIRECT_URL,
-              },
-            })
-          : await supabaseClient.auth.signInWithPassword({ email, password });
-        authSubmitBtn.disabled = false;
-        if (result.error) {
-          setAuthMessage(result.error.message, true);
-          return;
+        try {
+          const result = authRegisterMode
+            ? await supabaseClient.auth.signUp({
+                email,
+                password,
+                options: {
+                  data: { display_name: authName.value.trim(), role: "user" },
+                  emailRedirectTo: AUTH_REDIRECT_URL,
+                },
+              })
+            : await supabaseClient.auth.signInWithPassword({ email, password });
+          const errorStatus = result.error?.status || result.error?.statusCode;
+          if (result.error) {
+            if (
+              errorStatus === 429 ||
+              /rate limit|too many requests/i.test(result.error.message || "")
+            ) {
+              setAuthMessage(
+                "Too many attempts. Wait a minute before trying again.",
+                true,
+              );
+              authCooldownTimer = window.setTimeout(() => {
+                authCooldownTimer = null;
+              }, 60000);
+            } else {
+              setAuthMessage(result.error.message, true);
+            }
+            return;
+          }
+          setAuthMessage(
+            authRegisterMode && !result.data.session
+              ? "Check your email to confirm your account."
+              : "",
+          );
+        } catch (authError) {
+          setAuthMessage(
+            "Authentication is temporarily unavailable. Please try again later.",
+            true,
+          );
+        } finally {
+          authSubmitting = false;
+          authSubmitBtn.disabled = false;
         }
-        setAuthMessage(
-          authRegisterMode && !result.data.session
-            ? "Check your email to confirm your account."
-            : "",
-        );
       };
 
       signOutBtn.onclick = async () => {
