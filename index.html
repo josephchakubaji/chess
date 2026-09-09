@@ -1095,11 +1095,18 @@
         if (!currentUser) return null;
         const { data, error: ratingError } =
           await supabaseClient.rpc("get_my_profile");
-        if (ratingError || !data) return null;
-        const level = getRatingLevel(data.elo_rating);
-        ratingLabel.textContent = `Elo ${data.elo_rating} · ${level}`;
-        ratingSummary.textContent = `Elo ${data.elo_rating} · ${level} · ${data.games_played} rated game${data.games_played === 1 ? "" : "s"} · ${data.wins}W / ${data.losses}L / ${data.draws}D`;
-        return data;
+        const profile = Array.isArray(data) ? data[0] : data;
+        if (ratingError || !profile || profile.elo_rating == null) {
+          ratingLabel.textContent = "Elo unavailable";
+          ratingSummary.textContent =
+            "Elo setup is not available yet. Run the latest Supabase SQL migration.";
+          return null;
+        }
+        const rating = Number(profile.elo_rating);
+        const level = getRatingLevel(rating);
+        ratingLabel.textContent = `Elo ${rating} · ${level}`;
+        ratingSummary.textContent = `Elo ${rating} · ${level} · ${profile.games_played || 0} rated game${profile.games_played === 1 ? "" : "s"} · ${profile.wins || 0}W / ${profile.losses || 0}L / ${profile.draws || 0}D`;
+        return profile;
       }
 
       async function beginGameHistory(mode, opponent, timeControl) {
