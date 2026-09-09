@@ -1448,11 +1448,20 @@
           if (activityChannel)
             await supabaseClient.removeChannel(activityChannel);
           activityChannel = null;
+          accountLabel.textContent = "";
+          ratingLabel.textContent = "";
+          adminBtn.classList.add("hidden");
+          historyBtn.classList.add("hidden");
+          leaderboardBtn.classList.add("hidden");
+          signOutBtn.textContent = "Sign in";
           show(authScreen);
           return;
         }
         accountLabel.textContent = `${getDisplayName()}${isAdminUser(user) ? " (Admin)" : ""}`;
         adminBtn.classList.toggle("hidden", !isAdminUser(user));
+        historyBtn.classList.remove("hidden");
+        leaderboardBtn.classList.remove("hidden");
+        signOutBtn.textContent = "Sign out";
         await loadUserRating();
         await startActivityPresence();
         restoreAppState();
@@ -3431,6 +3440,10 @@
       };
 
       signOutBtn.onclick = async () => {
+        if (!currentUser) {
+          show(authScreen);
+          return;
+        }
         await supabaseClient.auth.signOut();
       };
       adminBtn.onclick = () => {
