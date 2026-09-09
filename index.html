@@ -147,6 +147,9 @@
           <button class="text-btn" id="historyBtn" type="button">
             Game history
           </button>
+          <button class="text-btn" id="leaderboardBtn" type="button">
+            Leaderboard
+          </button>
           <button class="text-btn" id="signOutBtn" type="button">
             Sign out
           </button>
@@ -177,6 +180,33 @@
               </tr>
             </thead>
             <tbody id="gameHistoryList"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="screen hidden" id="leaderboardScreen">
+        <div class="admin-header">
+          <div>
+            <h2>Elo leaderboard</h2>
+            <p id="leaderboardSummary">Loading rankings...</p>
+          </div>
+          <button class="text-btn" id="leaderboardBackBtn" type="button">
+            Back to game choices
+          </button>
+        </div>
+        <div class="history-table-wrap">
+          <table class="history-table leaderboard-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Elo</th>
+                <th>Level</th>
+                <th>Games</th>
+                <th>Record</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardList"></tbody>
           </table>
         </div>
       </section>
@@ -973,6 +1003,7 @@
       const authScreen = $("authScreen"),
         adminScreen = $("adminScreen"),
         historyScreen = $("historyScreen"),
+        leaderboardScreen = $("leaderboardScreen"),
         start = $("startScreen"),
         playerMode = $("playerModeScreen"),
         computer = $("computerScreen"),
@@ -1074,7 +1105,11 @@
         historySummary = $("historySummary"),
         ratingSummary = $("ratingSummary"),
         ratingLabel = $("ratingLabel"),
-        gameHistoryList = $("gameHistoryList");
+        gameHistoryList = $("gameHistoryList"),
+        leaderboardBtn = $("leaderboardBtn"),
+        leaderboardBackBtn = $("leaderboardBackBtn"),
+        leaderboardSummary = $("leaderboardSummary"),
+        leaderboardList = $("leaderboardList");
       let authRegisterMode = false,
         currentUser = null,
         activityChannel = null,
@@ -1117,6 +1152,39 @@
         ratingLabel.textContent = `Elo ${rating} · ${level}`;
         ratingSummary.textContent = `Elo ${rating} · ${level} · ${profile.games_played || 0} rated game${profile.games_played === 1 ? "" : "s"} · ${profile.wins || 0}W / ${profile.losses || 0}L / ${profile.draws || 0}D`;
         return profile;
+      }
+
+      async function loadLeaderboard() {
+        if (!currentUser) return;
+        leaderboardList.innerHTML =
+          '<tr><td colspan="6" class="history-empty">Loading rankings...</td></tr>';
+        const { data, error: leaderboardError } = await supabaseClient.rpc(
+          "get_leaderboard",
+          { p_limit: 100 },
+        );
+        const entries = Array.isArray(data) ? data : [];
+        if (leaderboardError) {
+          leaderboardSummary.textContent = "Leaderboard is not available yet.";
+          leaderboardList.innerHTML = `<tr><td colspan="6" class="history-empty">${String(leaderboardError.message).replace(/[&<>"']/g, "")}</td></tr>`;
+          return;
+        }
+        leaderboardSummary.textContent = `${entries.length} registered player${entries.length === 1 ? "" : "s"}, ranked by Elo.`;
+        leaderboardList.innerHTML = entries.length
+          ? entries
+              .map(
+                (entry) => `
+          <tr class="${entry.user_id === currentUser.id ? "leaderboard-current" : ""}">
+            <td>${entry.rank}</td>
+            <td>${String(entry.display_name || "Player").replace(/[&<>"']/g, "")}</td>
+            <td><strong>${entry.elo_rating}</strong></td>
+            <td>${getRatingLevel(Number(entry.elo_rating))}</td>
+            <td>${entry.games_played}</td>
+            <td>${entry.wins}W / ${entry.losses}L / ${entry.draws}D</td>
+          </tr>
+        `,
+              )
+              .join("")
+          : '<tr><td colspan="6" class="history-empty">No registered players yet.</td></tr>';
       }
 
       async function beginGameHistory(mode, opponent, timeControl) {
@@ -1211,6 +1279,7 @@
           authScreen,
           adminScreen,
           historyScreen,
+          leaderboardScreen,
           start,
           playerMode,
           computer,
@@ -3374,6 +3443,11 @@
         show(historyScreen);
       };
       historyBackBtn.onclick = () => show(start);
+      leaderboardBtn.onclick = async () => {
+        await loadLeaderboard();
+        show(leaderboardScreen);
+      };
+      leaderboardBackBtn.onclick = () => show(start);
 
       document.querySelectorAll(".difficulty-option").forEach((button) => {
         button.onclick = () => {

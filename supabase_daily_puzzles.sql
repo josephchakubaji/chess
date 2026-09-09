@@ -143,9 +143,48 @@ $$;
 revoke all on function public.get_my_profile() from public;
 grant execute on function public.get_my_profile() to authenticated;
 
+create or replace function public.get_leaderboard(p_limit integer default 100)
+returns table (
+  rank bigint,
+  user_id uuid,
+  display_name text,
+  elo_rating integer,
+  games_played integer,
+  wins integer,
+  losses integer,
+  draws integer
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    row_number() over (order by p.elo_rating desc, p.games_played desc, p.created_at asc) as rank,
+    p.id as user_id,
+    coalesce(nullif(trim(p.display_name), ''), 'Player') as display_name,
+    p.elo_rating,
+    p.games_played,
+    p.wins,
+    p.losses,
+    p.draws
+  from public.profiles p
+  order by p.elo_rating desc, p.games_played desc, p.created_at asc
+  limit least(greatest(coalesce(p_limit, 100), 1), 100);
+$$;
+
+revoke all on function public.get_leaderboard(integer) from public;
+grant execute on function public.get_leaderboard(integer) to authenticated;
+
 insert into public.profiles (id)
 select id from auth.users
 on conflict (id) do nothing;
+
+update public.profiles p
+set display_name = coalesce(nullif(p.display_name, ''), u.raw_user_meta_data ->> 'display_name'),
+    updated_at = now()
+from auth.users u
+where u.id = p.id
+  and (p.display_name is null or p.display_name = '');
 
 create or replace function public.record_elo_result(p_game_id uuid, p_result text)
 returns public.profiles
