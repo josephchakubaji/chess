@@ -1084,11 +1084,11 @@
       let activeGameHistoryId = null;
 
       function getRatingLevel(rating) {
-        if (rating >= 1800) return "Expert";
-        if (rating >= 1500) return "Advanced";
-        if (rating >= 1200) return "Intermediate";
-        if (rating >= 900) return "Developing";
-        return "Beginner";
+        if (rating >= 1800) return "1800+ Expert";
+        if (rating >= 1500) return "1500-1799 Advanced";
+        if (rating >= 1200) return "1200-1499 Intermediate";
+        if (rating >= 900) return "900-1199 Developing";
+        return "100-899 Beginner";
       }
 
       async function loadUserRating() {
