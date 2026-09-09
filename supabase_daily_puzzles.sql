@@ -216,7 +216,9 @@ begin
     select * into player from public.profiles where id = auth.uid();
     return player;
   end if;
-  if game_record.mode not in ('computer', 'private') then
+  -- Only authenticated online player games affect Elo.
+  -- Computer, pass-and-play, and puzzle records are non-rated.
+  if game_record.mode <> 'private' then
     update public.game_history set elo_processed = true where id = p_game_id;
     select * into player from public.profiles where id = auth.uid();
     return player;

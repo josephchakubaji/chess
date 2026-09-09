@@ -139,15 +139,23 @@
           </button>
         </div>
         <div class="account-bar">
-          <span id="accountLabel"></span>
-          <span id="ratingLabel" class="rating-label"></span>
+          <div class="account-identity">
+            <span class="account-avatar" aria-hidden="true">♔</span>
+            <span id="accountLabel"></span>
+          </div>
+          <div class="rating-card" aria-label="Your Elo rating">
+            <span class="rating-kicker">CURRENT RATING</span>
+            <strong id="ratingLabel" class="rating-label"></strong>
+          </div>
           <button class="text-btn hidden" id="adminBtn" type="button">
             Admin activity
           </button>
-          <button class="text-btn" id="historyBtn" type="button">
+          <button class="account-action" id="historyBtn" type="button">
+            <span class="action-icon" aria-hidden="true">▤</span>
             Game history
           </button>
-          <button class="text-btn" id="leaderboardBtn" type="button">
+          <button class="account-action" id="leaderboardBtn" type="button">
+            <span class="action-icon" aria-hidden="true">♛</span>
             Leaderboard
           </button>
           <button class="text-btn" id="signOutBtn" type="button">

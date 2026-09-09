@@ -37,8 +37,54 @@
 }
 
 .account-bar {
-  margin-top: 1.25rem;
+  align-items: stretch;
+  margin-top: 1.5rem;
   flex-wrap: wrap;
+}
+
+.account-identity,
+.rating-card,
+.account-action {
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 249, 0.86);
+}
+
+.account-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 3.25rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.55rem;
+  font-weight: 700;
+}
+
+.account-avatar {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--dark-square);
+  color: var(--paper);
+  font-size: 1.25rem;
+}
+
+.rating-card {
+  display: grid;
+  min-width: 13rem;
+  gap: 0.15rem;
+  padding: 0.55rem 0.85rem;
+  border-color: var(--accent);
+  border-radius: 0.55rem;
+  background: linear-gradient(135deg, rgba(231, 111, 81, 0.14), rgba(255, 253, 249, 0.9));
+}
+
+.rating-kicker {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 
 .rating-label,
@@ -48,7 +94,35 @@
 }
 
 .rating-label {
-  margin-left: auto;
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+
+.account-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 3.25rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.55rem;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.account-action:hover {
+  border-color: var(--accent);
+  background: #fff;
+  transform: translateY(-2px);
+}
+
+.action-icon {
+  color: var(--accent-dark);
+  font-size: 1.15rem;
 }
 
 .admin-players {
@@ -144,6 +218,26 @@
 .leaderboard-table th:nth-child(6) { width: 17%; }
 
 @media (max-width: 600px) {
+  .account-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-identity,
+  .rating-card,
+  .account-action {
+    min-width: 0;
+  }
+
+  .account-identity,
+  .rating-card {
+    grid-column: span 2;
+  }
+
+  .account-action {
+    width: 100%;
+  }
+
   .admin-header,
   .admin-player-row {
     align-items: flex-start;
