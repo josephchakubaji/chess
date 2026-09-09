@@ -135,7 +135,7 @@ revoke all on function public.get_my_profile() from public;
 grant execute on function public.get_my_profile() to authenticated;
 
 insert into public.profiles (id)
-select distinct user_id from public.game_history
+select id from auth.users
 on conflict (id) do nothing;
 
 create or replace function public.record_elo_result(p_game_id uuid, p_result text)

@@ -1093,13 +1093,23 @@
 
       async function loadUserRating() {
         if (!currentUser) return null;
-        const { data, error: ratingError } =
+        let { data, error: ratingError } =
           await supabaseClient.rpc("get_my_profile");
-        const profile = Array.isArray(data) ? data[0] : data;
+        let profile = Array.isArray(data) ? data[0] : data;
+
+        if (ratingError || !profile) {
+          const fallback = await supabaseClient
+            .from("profiles")
+            .select("id,elo_rating,games_played,wins,losses,draws")
+            .eq("id", currentUser.id)
+            .maybeSingle();
+          ratingError = fallback.error;
+          profile = fallback.data;
+        }
+
         if (ratingError || !profile || profile.elo_rating == null) {
           ratingLabel.textContent = "Elo unavailable";
-          ratingSummary.textContent =
-            "Elo setup is not available yet. Run the latest Supabase SQL migration.";
+          ratingSummary.textContent = `Elo setup unavailable: ${ratingError?.message || "profile row not found"}. Run the profile SQL setup and refresh.`;
           return null;
         }
         const rating = Number(profile.elo_rating);
