@@ -78,6 +78,9 @@
         <button class="text-btn" id="authModeBtn" type="button">
           Need an account? Register
         </button>
+        <button class="text-btn" id="forgotPasswordBtn" type="button">
+          Forgot password? Send reset email
+        </button>
       </section>
 
       <section class="screen hidden" id="adminScreen">
@@ -1103,6 +1106,7 @@
         authSubmitBtn = $("authSubmitBtn"),
         authModeBtn = $("authModeBtn"),
         authMessage = $("authMessage"),
+        forgotPasswordBtn = $("forgotPasswordBtn"),
         accountLabel = $("accountLabel"),
         adminBtn = $("adminBtn"),
         signOutBtn = $("signOutBtn"),
@@ -3388,6 +3392,35 @@
       });
 
       authModeBtn.onclick = updateAuthMode;
+      forgotPasswordBtn.onclick = async () => {
+        const email = authEmail.value.trim();
+        if (!email) {
+          setAuthMessage(
+            "Enter your email first, then request a reset link.",
+            true,
+          );
+          authEmail.focus();
+          return;
+        }
+        if (authSubmitting) return;
+        authSubmitting = true;
+        forgotPasswordBtn.disabled = true;
+        setAuthMessage("Sending password reset email...");
+        const { error: resetError } =
+          await supabaseClient.auth.resetPasswordForEmail(email, {
+            redirectTo: AUTH_REDIRECT_URL,
+          });
+        if (resetError) {
+          setAuthMessage(resetError.message, true);
+        } else {
+          setAuthMessage(
+            "If this email is registered, a password reset link has been sent.",
+          );
+        }
+        authSubmitting = false;
+        forgotPasswordBtn.disabled = false;
+      };
+
       authForm.onsubmit = async (event) => {
         event.preventDefault();
         if (authSubmitting) return;
@@ -3431,6 +3464,20 @@
             }
             return;
           }
+
+          const existingRegisteredUser =
+            authRegisterMode &&
+            result.data?.user &&
+            Array.isArray(result.data.user.identities) &&
+            result.data.user.identities.length === 0;
+          if (existingRegisteredUser) {
+            setAuthMessage(
+              "An account with this email already exists. Sign in instead.",
+              true,
+            );
+            return;
+          }
+
           setAuthMessage(
             authRegisterMode && !result.data.session
               ? "Check your email to confirm your account."
