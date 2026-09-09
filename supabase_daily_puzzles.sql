@@ -86,6 +86,15 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+alter table public.profiles add column if not exists display_name text;
+alter table public.profiles add column if not exists elo_rating integer not null default 1200;
+alter table public.profiles add column if not exists games_played integer not null default 0;
+alter table public.profiles add column if not exists wins integer not null default 0;
+alter table public.profiles add column if not exists losses integer not null default 0;
+alter table public.profiles add column if not exists draws integer not null default 0;
+alter table public.profiles add column if not exists created_at timestamptz not null default now();
+alter table public.profiles add column if not exists updated_at timestamptz not null default now();
+
 alter table public.profiles enable row level security;
 
 drop policy if exists "Users can view their own profile" on public.profiles;
