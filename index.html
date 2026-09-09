@@ -1778,6 +1778,14 @@
       }
 
       function rowToDailyPuzzle(row) {
+        let solution = row.solution;
+        if (typeof solution === "string") {
+          try {
+            solution = JSON.parse(solution);
+          } catch (_error) {
+            solution = [];
+          }
+        }
         return {
           id: row.puzzle_id || `daily_${row.date}`,
           sourcePuzzleId: row.source_puzzle_id,
@@ -1785,14 +1793,62 @@
           category: row.category || "Advanced",
           goal: row.goal,
           fen: row.fen,
-          solution: Array.isArray(row.solution) ? row.solution : [],
-          hint: row.hint || "Find the forcing tactical move.",
+          solution: Array.isArray(solution) ? solution : [],
+          hint: row.hint || "",
           rating: row.rating,
           themes: row.themes || [],
           isDaily: true,
           source: row.source || "supabase",
           date: row.date,
         };
+      }
+
+      function getDailyHint(puzzle) {
+        const solution = Array.isArray(puzzle?.solution) ? puzzle.solution : [];
+        const target = solution[currentPuzzleStep] || solution[0];
+        if (target && target.length >= 4) {
+          const from = target.slice(0, 2);
+          const to = target.slice(2, 4);
+          const piece = chess.get(from);
+          const pieceNames = {
+            p: "pawn",
+            n: "knight",
+            b: "bishop",
+            r: "rook",
+            q: "queen",
+            k: "king",
+          };
+          const pieceName = pieceNames[piece?.type] || "piece";
+          const legalMove = chess
+            .moves({ square: from, verbose: true })
+            .find((move) => move.to === to);
+          const capture = legalMove?.captured
+            ? ` Capture the piece on ${to}.`
+            : ` Aim for ${to}.`;
+          const check =
+            legalMove?.san?.includes("+") || legalMove?.san?.includes("#")
+              ? " This gives check."
+              : "";
+          return `Move your ${pieceName} from ${from} toward ${to}.${capture}${check}`;
+        }
+
+        const theme = (puzzle?.themes || []).find(Boolean);
+        const themeHints = {
+          advancedPawn:
+            "Look for a forcing pawn push that creates a promotion threat.",
+          fork: "Look for a move that attacks two valuable pieces at once.",
+          pin: "Find a piece that cannot move because something more valuable is behind it.",
+          mate: "First examine checks, especially moves that remove the king's escape squares.",
+          endgame:
+            "Improve your king or create a passed pawn before making a quiet move.",
+          zugzwang:
+            "Look for a move that forces the opponent to worsen their position.",
+        };
+        return (
+          themeHints[theme] ||
+          puzzle?.hint ||
+          "Look for a forcing move: check, capture, or threat."
+        );
       }
 
       async function saveDailyPuzzleToSupabase(puzzle) {
@@ -3595,7 +3651,7 @@
           currentPuzzleIndex === -1
             ? activePuzzle || dailyPuzzle
             : PUZZLES[currentPuzzleIndex];
-        if (puzzle) showToast(`💡 Hint: ${puzzle.hint}`);
+        if (puzzle) showToast(`💡 Hint: ${getDailyHint(puzzle)}`);
       };
 
       $("retryPuzzleBtn").onclick = () => {
