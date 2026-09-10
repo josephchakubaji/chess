@@ -4256,6 +4256,10 @@
         } else {
           startLocal(selectedTimeControl);
         }
+
+        if (state.variant === "chess960") {
+          startSelectedVariant();
+        }
       };
 
       if (rejoinDismissBtn) {
