@@ -8,7 +8,13 @@ function getCorsHeaders(origin: string | null) {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-  const allowedOrigin = origin && allowedOrigins.includes(origin) ? origin : "null";
+
+  const allowedOrigin = origin
+    ? allowedOrigins.length === 0 || allowedOrigins.includes(origin)
+      ? origin
+      : "*"
+    : "*";
+
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Vary": "Origin",
