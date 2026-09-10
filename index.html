@@ -4259,7 +4259,11 @@
         moveHistory = [];
         undoStack = [];
         thinking = false;
-        draw();
+        if (state.variant === "chess960") {
+          startSelectedVariant();
+        } else {
+          draw();
+        }
         if (timedMode) startClock();
       };
 
