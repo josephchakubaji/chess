@@ -315,3 +315,69 @@ with check (realtime.topic() like 'chess-%');
 
 -- One-time cleanup query: purge any seeded practice puzzles from the daily table
 delete from public.daily_puzzles where source != 'lichess-api';
+
+-- ============================================================
+-- AUTOMATED DAILY PUZZLE ARCHIVING
+-- ============================================================
+-- Requires pg_cron and pg_net extensions (enabled by default on Supabase).
+-- The cron job runs at 23:45 UTC every day, calling the
+-- `cron-save-daily-puzzle` edge function before Lichess rotates
+-- to the next puzzle at midnight UTC.
+--
+-- SETUP STEPS:
+--   1. Deploy the edge function:
+--        supabase functions deploy cron-save-daily-puzzle
+--   2. Set the shared secret (use any long random string):
+--        supabase secrets set CRON_SECRET=<your-random-secret>
+--   3. Run this SQL file in the Supabase SQL Editor.
+--   4. The cron job will fire automatically every night at 23:45 UTC.
+-- ============================================================
+
+-- Enable required extensions
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- Remove any previous version of this job before recreating
+select cron.unschedule('archive-lichess-daily-puzzle')
+where exists (
+  select 1 from cron.job where jobname = 'archive-lichess-daily-puzzle'
+);
+
+-- Schedule the job: every day at 23:45 UTC
+select cron.schedule(
+  'archive-lichess-daily-puzzle',   -- unique job name
+  '45 23 * * *',                    -- cron expression: 23:45 UTC daily
+  $$
+  select net.http_post(
+    -- Replace <PROJECT_REF> with your actual Supabase project reference ID
+    url := 'https://<PROJECT_REF>.supabase.co/functions/v1/cron-save-daily-puzzle',
+    headers := jsonb_build_object(
+      'Content-Type',  'application/json',
+      -- vault.decrypted_secrets stores CRON_SECRET set via `supabase secrets set`
+      'Authorization', 'Bearer ' || (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'CRON_SECRET'
+        limit 1
+      )
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);
+
+-- -------------------------------------------------------
+-- Optional: manual trigger to save today's puzzle now
+-- (run this in the SQL editor whenever you need a one-off save)
+-- -------------------------------------------------------
+-- select net.http_post(
+--   url := 'https://<PROJECT_REF>.supabase.co/functions/v1/cron-save-daily-puzzle',
+--   headers := jsonb_build_object(
+--     'Content-Type',  'application/json',
+--     'Authorization', 'Bearer ' || (
+--       select decrypted_secret from vault.decrypted_secrets where name = 'CRON_SECRET' limit 1
+--     )
+--   ),
+--   body := '{}'::jsonb
+-- );
+
