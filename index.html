@@ -4250,21 +4250,12 @@
           updateLobby();
           return;
         }
-        stopClock();
-        hideGameOverModal();
-        modalShownForGame = false;
-        if (timedMode) setClock(selectedTimeControl);
-        chess.reset();
-        lastMove = null;
-        moveHistory = [];
-        undoStack = [];
-        thinking = false;
-        if (state.variant === "chess960") {
-          startSelectedVariant();
+
+        if (computerMode) {
+          startComputer(difficulty, selectedTimeControl);
         } else {
-          draw();
+          startLocal(selectedTimeControl);
         }
-        if (timedMode) startClock();
       };
 
       if (rejoinDismissBtn) {
