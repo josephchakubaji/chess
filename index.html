@@ -1855,6 +1855,8 @@
         if (!puzzle || puzzle.source !== "lichess-api") return;
 
         try {
+          // Build the row to send — the edge function will use this directly
+          // instead of re-fetching from Lichess, which also lets past dates be saved.
           const row = {
             date: puzzle.date,
             puzzle_id: puzzle.id || `lichess_daily_${puzzle.date}`,
@@ -1872,7 +1874,7 @@
 
           const { data, error } = await supabaseClient.functions.invoke(
             "save-daily-puzzle",
-            { body: {} },
+            { body: row },
           );
 
           if (error) {

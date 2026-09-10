@@ -34,7 +34,6 @@ type LichessDaily = {
 };
 
 function getInitialFen(data: LichessDaily) {
-  // Lichess Daily API directly provides puzzle.fen as the initial board state
   if (data.puzzle?.fen) return data.puzzle.fen;
   if (data.game?.fen) return data.game.fen;
   if (!data.game?.pgn) return null;
@@ -55,7 +54,6 @@ function buildPlayerPosition(initialFen: string, solution: string[]) {
   let playerFen = initialFen;
   let playerSolution = solution;
 
-  // In Lichess puzzle solutions, solution[0] is opponent's last move that sets up the puzzle
   if (solution.length > 1) {
     const setupMove = solution[0];
     try {
@@ -76,9 +74,7 @@ function buildPlayerPosition(initialFen: string, solution: string[]) {
           playerFen = chess.fen();
           playerSolution = solution.slice(1);
         }
-      } catch (_e2) {
-        // Fallback: keep initial FEN
-      }
+      } catch (_e2) {}
     }
   }
 
@@ -110,7 +106,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const todayKey = new Date().toISOString().slice(0, 10);
     const supabase = createClient(supabaseUrl, supabaseKey);
     const authorization = req.headers.get("Authorization");
     const accessToken = authorization?.replace(/^Bearer\s+/i, "");
@@ -128,27 +123,72 @@ Deno.serve(async (req) => {
       );
     }
 
-    let row: any = null;
+    // Parse optional client-provided puzzle payload.
+    // The client can send: { date?, puzzle_id?, source_puzzle_id?, title?, category?,
+    //   goal?, fen, solution, hint?, rating?, themes? }
+    // When `fen` + `solution` are present the edge function skips the Lichess fetch
+    // and uses the client data directly — which lets past dates be saved as well.
+    let clientRow: Record<string, unknown> | null = null;
+    let targetDate = new Date().toISOString().slice(0, 10);
 
-    {
-      // Check if daily puzzle already exists in DB before fetching.
-      const existing = await supabase
-        .from("daily_puzzles")
-        .select(
-          "date,puzzle_id,source_puzzle_id,title,category,goal,fen,solution,hint,rating,themes,source",
-        )
-        .eq("date", todayKey)
-        .eq("source", "lichess-api")
-        .maybeSingle();
-
-      if (existing.data) {
-        return Response.json(
-          { puzzle: existing.data, saved: false },
-          { headers: corsHeaders },
-        );
+    if (req.method === "POST") {
+      try {
+        const body = await req.json().catch(() => ({}));
+        if (
+          body &&
+          typeof body.fen === "string" &&
+          body.fen.length > 0 &&
+          Array.isArray(body.solution) &&
+          body.solution.length > 0
+        ) {
+          // Validate the date field if present
+          if (body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
+            targetDate = body.date;
+          }
+          clientRow = {
+            date: targetDate,
+            puzzle_id:
+              body.puzzle_id ||
+              `lichess_daily_${targetDate}_${body.source_puzzle_id || "api"}`,
+            source_puzzle_id: body.source_puzzle_id ?? null,
+            title: body.title || "Daily Tactical Shot",
+            category: body.category || "Advanced",
+            goal: body.goal || "Find the best move!",
+            fen: body.fen,
+            solution: body.solution,
+            hint: body.hint ?? null,
+            rating: body.rating ?? null,
+            themes: Array.isArray(body.themes) ? body.themes : [],
+            source: "lichess-api",
+          };
+        }
+      } catch (_e) {
+        // ignore — fall through to Lichess fetch
       }
+    }
 
-      // Fetch fresh from Lichess API
+    // Check if a record already exists for this date
+    const { data: existing } = await supabase
+      .from("daily_puzzles")
+      .select(
+        "date,puzzle_id,source_puzzle_id,title,category,goal,fen,solution,hint,rating,themes,source",
+      )
+      .eq("date", targetDate)
+      .eq("source", "lichess-api")
+      .maybeSingle();
+
+    // If a record exists and we have no new client data to force an update, return it
+    if (existing && !clientRow) {
+      return Response.json(
+        { puzzle: existing, saved: false },
+        { headers: corsHeaders },
+      );
+    }
+
+    let row = clientRow;
+
+    if (!row) {
+      // No client payload — fetch fresh from Lichess (only returns today's puzzle)
       const lichessRes = await fetch(LICHESS_DAILY_API, {
         headers: { Accept: "application/json" },
       });
@@ -171,15 +211,12 @@ Deno.serve(async (req) => {
         );
       }
 
-      const { cleanFen, playerSolution } = buildPlayerPosition(
-        initialFen,
-        solution,
-      );
+      const { cleanFen, playerSolution } = buildPlayerPosition(initialFen, solution);
       const firstTheme = data.puzzle?.themes?.[0];
 
       row = {
-        date: todayKey,
-        puzzle_id: `lichess_daily_${todayKey}_${data.puzzle?.id || "api"}`,
+        date: targetDate,
+        puzzle_id: `lichess_daily_${targetDate}_${data.puzzle?.id || "api"}`,
         source_puzzle_id: data.puzzle?.id || null,
         title: `Daily: ${
           firstTheme ? firstTheme.replace(/([A-Z])/g, " $1") : "Tactical Shot"
