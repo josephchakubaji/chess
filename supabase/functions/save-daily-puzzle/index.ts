@@ -3,20 +3,22 @@ import { Chess } from "npm:chess.js@1.0.0";
 
 const LICHESS_DAILY_API = "https://lichess.org/api/puzzle/daily";
 
-function getCorsHeaders(origin: string | null) {
-  const allowedOrigins = (Deno.env.get("APP_ORIGINS") || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
+function normalizeOrigin(value: string) {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
 
-  const allowedOrigin = origin
-    ? allowedOrigins.length === 0 || allowedOrigins.includes(origin)
-      ? origin
-      : "*"
-    : "*";
+  try {
+    return new URL(trimmed).origin;
+  } catch (_error) {
+    return trimmed;
+  }
+}
+
+function getCorsHeaders(origin: string | null) {
+  const normalizedOrigin = origin ? normalizeOrigin(origin) : null;
 
   return {
-    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Origin": normalizedOrigin || "*",
     "Vary": "Origin",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, accept, origin, x-requested-with",
