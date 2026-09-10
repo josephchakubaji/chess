@@ -72,6 +72,65 @@ create table if not exists public.game_history (
 alter table public.game_history
 add column if not exists elo_processed boolean not null default false;
 
+-- Columns for rejoin-game support:
+-- room_code stores the Supabase Realtime channel code so a player can reconnect.
+-- pgn stores the game's move history as PGN so the board can be restored on rejoin.
+alter table public.game_history
+add column if not exists room_code text;
+
+alter table public.game_history
+add column if not exists pgn text;
+
+-- get_active_game: returns the user's most recent in-progress private game (if any).
+-- Used by the client to show a "Rejoin game" banner on the home screen.
+create or replace function public.get_active_game()
+returns table (
+  id uuid,
+  room_code text,
+  pgn text,
+  time_control text,
+  created_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    gh.id,
+    gh.room_code,
+    gh.pgn,
+    gh.time_control,
+    gh.created_at
+  from public.game_history gh
+  where gh.user_id = auth.uid()
+    and gh.mode = 'private'
+    and gh.status = 'in_progress'
+    and gh.room_code is not null
+  order by gh.created_at desc
+  limit 1;
+$$;
+
+revoke all on function public.get_active_game() from public;
+grant execute on function public.get_active_game() to authenticated;
+
+-- update_game_pgn: called after each move in a private game to keep pgn column current.
+create or replace function public.update_game_pgn(p_game_id uuid, p_pgn text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.game_history
+  set pgn = p_pgn
+  where id = p_game_id and user_id = auth.uid();
+end;
+$$;
+
+revoke all on function public.update_game_pgn(uuid, text) from public;
+grant execute on function public.update_game_pgn(uuid, text) to authenticated;
+
+
 alter table public.game_history enable row level security;
 
 create table if not exists public.profiles (

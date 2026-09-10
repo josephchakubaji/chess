@@ -1267,3 +1267,139 @@ body[data-piece-theme="glass"] .piece { opacity: 0.88; filter: drop-shadow(0 2px
   .game-layout { grid-template-columns: 170px minmax(0, 1fr) 190px; gap: 18px; }
   .board { max-height: calc(100dvh - 100px); width: auto; height: min(calc(100dvh - 100px), 640px); }
 }
+
+/* ============================================================
+   REJOIN IN-PROGRESS GAME BANNER & UNDO REQUEST STYLES
+   ============================================================ */
+.rejoin-banner {
+  background: linear-gradient(135deg, rgba(39, 106, 140, 0.28) 0%, rgba(23, 33, 43, 0.95) 100%);
+  border: 1px solid rgba(83, 190, 240, 0.45);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 16px rgba(83, 190, 240, 0.15);
+  margin-bottom: 20px;
+  overflow: hidden;
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+.rejoin-banner-inner {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+.rejoin-icon {
+  align-items: center;
+  background: rgba(83, 190, 240, 0.18);
+  border: 1px solid rgba(83, 190, 240, 0.35);
+  border-radius: 50%;
+  display: flex;
+  font-size: 1.6rem;
+  height: 42px;
+  justify-content: center;
+  min-width: 42px;
+  width: 42px;
+}
+
+.rejoin-text {
+  display: flex;
+  flex: 1 1 180px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rejoin-text strong {
+  color: #f1f8fc;
+  font-size: 1rem;
+  letter-spacing: 0.2px;
+}
+
+.rejoin-text small {
+  color: #92b1c4;
+  font-size: 0.85rem;
+}
+
+.rejoin-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rejoin-btn {
+  background: linear-gradient(135deg, #1b8fb5, #276a8c);
+  border: 1px solid #53bef0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 18px;
+  transition: all 0.2s ease;
+}
+
+.rejoin-btn:hover {
+  background: linear-gradient(135deg, #27a3ce, #3582ab);
+  box-shadow: 0 4px 14px rgba(83, 190, 240, 0.4);
+  transform: translateY(-1px);
+}
+
+.rejoin-dismiss {
+  color: #8fa4b3;
+  cursor: pointer;
+  font-size: 0.84rem;
+  padding: 6px 10px;
+}
+
+.rejoin-dismiss:hover {
+  color: #e0ecf3;
+}
+
+.btn-secondary {
+  background: rgba(45, 60, 75, 0.7);
+  border: 1px solid #4a6375;
+  color: #d2e4ee;
+}
+
+.btn-secondary:hover {
+  background: rgba(60, 80, 100, 0.85);
+  color: #fff;
+}
+
+.undo-request-card {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  max-width: 380px;
+  text-align: center;
+}
+
+.undo-request-icon {
+  align-items: center;
+  background: rgba(83, 190, 240, 0.15);
+  border: 1px solid rgba(83, 190, 240, 0.35);
+  border-radius: 50%;
+  color: #53bef0;
+  display: flex;
+  font-size: 2rem;
+  height: 60px;
+  justify-content: center;
+  margin-bottom: 12px;
+  width: 60px;
+}
+
+@media (max-width: 520px) {
+  .rejoin-banner-inner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .rejoin-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .rejoin-btn {
+    flex: 1;
+  }
+}
+

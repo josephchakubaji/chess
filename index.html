@@ -104,6 +104,21 @@
           Select your preferred game mode. Play against computer AI, practice
           tactics, or challenge another player.
         </p>
+        <!-- Rejoin in-progress game banner (shown dynamically) -->
+        <div class="rejoin-banner hidden" id="rejoinBanner" role="status" aria-live="polite">
+          <div class="rejoin-banner-inner">
+            <span class="rejoin-icon">♟</span>
+            <div class="rejoin-text">
+              <strong id="rejoinTitle">Game in progress</strong>
+              <small id="rejoinMeta">Private room · Unlimited</small>
+            </div>
+            <div class="rejoin-actions">
+              <button class="btn rejoin-btn" id="rejoinBtn" type="button">↩ Rejoin</button>
+              <button class="text-btn rejoin-dismiss" id="rejoinDismissBtn" type="button">Dismiss</button>
+            </div>
+          </div>
+        </div>
+
         <div class="mode-grid">
           <button class="mode-card" id="computerModeBtn">
             <strong>Play computer</strong>
@@ -621,6 +636,8 @@
             <div id="standardControls">
               <button class="btn" id="resetBtn">New game</button>
               <button class="btn" id="undoBtn">Undo move</button>
+              <!-- shown only in private rooms: asks opponent to allow undo -->
+              <button class="btn btn-secondary hidden" id="requestUndoBtn">⟲ Request undo</button>
             </div>
 
             <div id="puzzleControls" class="puzzle-controls hidden">
@@ -719,6 +736,19 @@
             <button class="text-btn" id="modalCloseBtn" type="button">
               Review Board
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Undo Request Modal (private rooms) -->
+      <div class="modal-overlay hidden" id="undoRequestModal" aria-modal="true" role="dialog">
+        <div class="modal-card undo-request-card">
+          <div class="undo-request-icon">⟲</div>
+          <h2 class="modal-title" id="undoRequestTitle">Undo Requested</h2>
+          <p class="modal-message" id="undoRequestMsg">Your opponent wants to take back their last move.</p>
+          <div class="modal-actions">
+            <button class="btn" id="undoAcceptBtn" type="button">Accept</button>
+            <button class="btn btn-secondary" id="undoDeclineBtn" type="button">Decline</button>
           </div>
         </div>
       </div>
@@ -1067,6 +1097,7 @@
         reviewVariationText = "";
       let channel = null,
         privateRoom = false,
+        currentRoomCode = null,
         computerMode = false,
         timedMode = false,
         puzzleMode = false,
@@ -1122,6 +1153,16 @@
         leaderboardBackBtn = $("leaderboardBackBtn"),
         leaderboardSummary = $("leaderboardSummary"),
         leaderboardList = $("leaderboardList");
+      const rejoinBanner = $("rejoinBanner"),
+        rejoinTitle = $("rejoinTitle"),
+        rejoinMeta = $("rejoinMeta"),
+        rejoinBtn = $("rejoinBtn"),
+        rejoinDismissBtn = $("rejoinDismissBtn");
+      const requestUndoBtn = $("requestUndoBtn"),
+        undoRequestModal = $("undoRequestModal"),
+        undoRequestMsg = $("undoRequestMsg"),
+        undoAcceptBtn = $("undoAcceptBtn"),
+        undoDeclineBtn = $("undoDeclineBtn");
       let authRegisterMode = false,
         currentUser = null,
         activityChannel = null,
@@ -1130,6 +1171,9 @@
         authCooldownTimer = null;
       let activeGameHistoryId = null;
       let activeGameMode = null; // 'private' | 'computer' | 'pass_and_play' — only 'private' is rated
+      let resumableGame = null; // stored game from get_active_game()
+      let undoRequestedByMe = false;
+
 
       function getRatingLevel(rating) {
         if (rating >= 1800) return "1800+ Expert";
@@ -1200,19 +1244,22 @@
           : '<tr><td colspan="6" class="history-empty">No registered players yet.</td></tr>';
       }
 
-      async function beginGameHistory(mode, opponent, timeControl) {
+      async function beginGameHistory(mode, opponent, timeControl, roomCode = null) {
         if (!currentUser) return;
         if (activeGameHistoryId)
           await finishGameHistory("abandoned", "New game started");
+        const insertPayload = {
+          user_id: currentUser.id,
+          mode,
+          opponent: opponent || "Unknown opponent",
+          time_control: timeControl || "unlimited",
+          status: "in_progress",
+        };
+        if (roomCode) insertPayload.room_code = roomCode;
+        if (chess && typeof chess.pgn === "function") insertPayload.pgn = chess.pgn();
         const { data, error: historyError } = await supabaseClient
           .from("game_history")
-          .insert({
-            user_id: currentUser.id,
-            mode,
-            opponent: opponent || "Unknown opponent",
-            time_control: timeControl || "unlimited",
-            status: "in_progress",
-          })
+          .insert(insertPayload)
           .select("id")
           .maybeSingle();
         if (historyError) {
@@ -1226,6 +1273,61 @@
         }
         activeGameHistoryId = data?.id || null;
         activeGameMode = mode; // remember the mode so Elo is only updated for rated games
+      }
+
+      async function syncGamePgn() {
+        if (!activeGameHistoryId || !currentUser) return;
+        try {
+          const currentPgn = typeof chess.pgn === "function" ? chess.pgn() : "";
+          await supabaseClient
+            .from("game_history")
+            .update({ pgn: currentPgn })
+            .eq("id", activeGameHistoryId)
+            .eq("user_id", currentUser.id);
+        } catch (err) {
+          console.warn("syncGamePgn failed:", err);
+        }
+      }
+
+      async function checkActiveGame() {
+        if (!currentUser) {
+          if (rejoinBanner) rejoinBanner.classList.add("hidden");
+          resumableGame = null;
+          return;
+        }
+        try {
+          let activeGame = null;
+          const { data: rpcData, error: rpcErr } = await supabaseClient.rpc("get_active_game");
+          if (!rpcErr && rpcData && rpcData.length > 0) {
+            activeGame = rpcData[0];
+          } else {
+            const { data: selectData, error: selectErr } = await supabaseClient
+              .from("game_history")
+              .select("id, room_code, pgn, time_control, created_at")
+              .eq("user_id", currentUser.id)
+              .eq("mode", "private")
+              .eq("status", "in_progress")
+              .not("room_code", "is", null)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (!selectErr && selectData) activeGame = selectData;
+          }
+
+          if (activeGame && activeGame.room_code) {
+            resumableGame = activeGame;
+            if (rejoinTitle) rejoinTitle.textContent = `Game in progress: Room ${activeGame.room_code}`;
+            if (rejoinMeta) rejoinMeta.textContent = `Private match · ${activeGame.time_control || "Unlimited"}`;
+            if (rejoinBanner) rejoinBanner.classList.remove("hidden");
+          } else {
+            resumableGame = null;
+            if (rejoinBanner) rejoinBanner.classList.add("hidden");
+          }
+        } catch (err) {
+          console.warn("checkActiveGame error:", err);
+          if (rejoinBanner) rejoinBanner.classList.add("hidden");
+          resumableGame = null;
+        }
       }
 
       async function finishGameHistory(status, result) {
@@ -1253,7 +1355,9 @@
           });
           await loadUserRating();
         }
+        void checkActiveGame();
       }
+
 
       async function loadGameHistory() {
         if (!currentUser) return;
@@ -1312,6 +1416,7 @@
         ].forEach((item) => item.classList.add("hidden"));
         screen.classList.remove("hidden");
         saveAppState(screen.id);
+        if (screen === start) void checkActiveGame();
         void updateActivityPresence();
       }
 
@@ -2840,6 +2945,7 @@
                   clockMs,
                 },
               });
+              void syncGamePgn();
             }
 
             draw();
@@ -3283,6 +3389,7 @@
         puzzleMode = false;
         $("standardControls").classList.remove("hidden");
         $("puzzleControls").classList.add("hidden");
+        if (requestUndoBtn) requestUndoBtn.classList.remove("hidden");
         setClock(tc);
         connection.textContent = timedMode
           ? `Connected as ${color === "w" ? "White" : "Black"} (${tc})`
@@ -3295,7 +3402,7 @@
         selected = null;
         draw();
         show(game);
-        void beginGameHistory("private", "Private opponent", tc);
+        void beginGameHistory("private", "Private opponent", tc, currentRoomCode);
         if (timedMode) startClock();
       }
 
@@ -3305,6 +3412,8 @@
         modalShownForGame = false;
         timedMode = false;
         puzzleMode = false;
+        if (requestUndoBtn) requestUndoBtn.classList.add("hidden");
+        if (undoRequestModal) undoRequestModal.classList.add("hidden");
         if (channel) {
           if (notify)
             await channel.send({ type: "broadcast", event: "player-left" });
@@ -3312,6 +3421,7 @@
           channel = null;
         }
         privateRoom = false;
+        currentRoomCode = null;
         started = false;
         color = null;
         clearRoomLink();
@@ -3335,6 +3445,7 @@
         hideGameOverModal();
         modalShownForGame = false;
         privateRoom = true;
+        currentRoomCode = code;
         computerMode = false;
         puzzleMode = false;
         host = isHost;
@@ -3390,6 +3501,31 @@
               clockMs = { ...message.payload.clockMs };
             draw();
             if (timedMode) startClock();
+            void syncGamePgn();
+          })
+          .on("broadcast", { event: "undo-request" }, function (message) {
+            if (message.payload.requesterId === id) return;
+            if (undoRequestMsg) {
+              undoRequestMsg.textContent = "Your opponent requested to take back their last move. Do you allow it?";
+            }
+            if (undoRequestModal) undoRequestModal.classList.remove("hidden");
+          })
+          .on("broadcast", { event: "undo-response" }, function (message) {
+            if (message.payload.accepted) {
+              if (message.payload.fen) {
+                chess.load(message.payload.fen);
+                lastMove = message.payload.lastMove || null;
+                moveHistory = message.payload.history || [];
+                if (message.payload.clockMs) clockMs = { ...message.payload.clockMs };
+                draw();
+                if (timedMode && !chess.game_over()) startClock();
+                void syncGamePgn();
+              }
+              showToast("Undo request was accepted! ⟲");
+            } else {
+              showToast("Undo request was declined.");
+            }
+            undoRequestedByMe = false;
           })
           .on("broadcast", { event: "timeout" }, function (message) {
             clockExpired = true;
@@ -3864,6 +4000,131 @@
         draw();
         if (timedMode) startClock();
       };
+
+      if (rejoinDismissBtn) {
+        rejoinDismissBtn.onclick = () => {
+          if (rejoinBanner) rejoinBanner.classList.add("hidden");
+          resumableGame = null;
+        };
+      }
+
+      if (rejoinBtn) {
+        rejoinBtn.onclick = async () => {
+          if (!resumableGame || !resumableGame.room_code) {
+            showToast("No active game to rejoin.");
+            return;
+          }
+          const targetRoom = resumableGame.room_code;
+          const targetPgn = resumableGame.pgn;
+          const targetTc = resumableGame.time_control || "unlimited";
+          showToast(`Rejoining room ${targetRoom}...`);
+          await joinPrivate(targetRoom, false);
+          if (targetPgn) {
+            try {
+              chess.load_pgn(targetPgn, { sloppy: true });
+              moveHistory = chess.history();
+              draw();
+            } catch (pgnErr) {
+              console.warn("Could not restore PGN:", pgnErr);
+            }
+          }
+          if (rejoinBanner) rejoinBanner.classList.add("hidden");
+        };
+      }
+
+      if (requestUndoBtn) {
+        requestUndoBtn.onclick = async () => {
+          if (!privateRoom || !channel || !started) {
+            showToast("Undo request is only available during an active private game.");
+            return;
+          }
+          if (undoRequestedByMe) {
+            showToast("Undo request already pending.");
+            return;
+          }
+          undoRequestedByMe = true;
+          try {
+            await channel.send({
+              type: "broadcast",
+              event: "undo-request",
+              payload: { requesterId: id },
+            });
+            showToast("Undo request sent to opponent...");
+          } catch (err) {
+            undoRequestedByMe = false;
+            showToast("Could not send undo request.");
+          }
+        };
+      }
+
+      if (undoAcceptBtn) {
+        undoAcceptBtn.onclick = async () => {
+          if (undoRequestModal) undoRequestModal.classList.add("hidden");
+          if (!channel || !privateRoom) return;
+
+          let targetFen = null;
+          let targetLastMove = null;
+          let targetHistory = [];
+          let targetClocks = { ...clockMs };
+
+          if (undoStack.length > 0) {
+            const popped = undoStack.pop();
+            targetFen = popped.fen;
+            targetLastMove = popped.lastMove;
+            targetHistory = popped.moveHistory;
+            targetClocks = { ...popped.clockMs };
+          } else {
+            chess.undo();
+            targetFen = chess.fen();
+            targetHistory = chess.history();
+          }
+
+          if (targetFen) {
+            chess.load(targetFen);
+            lastMove = targetLastMove;
+            moveHistory = targetHistory;
+            clockMs = targetClocks;
+            draw();
+            if (timedMode && !chess.game_over()) startClock();
+            void syncGamePgn();
+          }
+
+          try {
+            await channel.send({
+              type: "broadcast",
+              event: "undo-response",
+              payload: {
+                accepted: true,
+                fen: targetFen,
+                lastMove: targetLastMove,
+                history: targetHistory,
+                clockMs: targetClocks,
+              },
+            });
+          } catch (err) {
+            console.warn("Error sending undo-response:", err);
+          }
+          showToast("You accepted the undo request. ⟲");
+        };
+      }
+
+      if (undoDeclineBtn) {
+        undoDeclineBtn.onclick = async () => {
+          if (undoRequestModal) undoRequestModal.classList.add("hidden");
+          if (channel && privateRoom) {
+            try {
+              await channel.send({
+                type: "broadcast",
+                event: "undo-response",
+                payload: { accepted: false },
+              });
+            } catch (err) {
+              console.warn("Error sending undo decline:", err);
+            }
+          }
+          showToast("You declined the undo request.");
+        };
+      }
 
       window.addEventListener(
         "pagehide",
