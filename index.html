@@ -2776,9 +2776,20 @@
 
         if (privateRoom) {
           undo.classList.add("hidden");
+          if (requestUndoBtn) {
+            requestUndoBtn.classList.toggle(
+              "hidden",
+              chess.game_over() || clockExpired || replaying,
+            );
+          }
         } else if (!puzzleMode) {
           undo.classList.remove("hidden");
-          undo.disabled = undoStack.length === 0 || thinking || replaying;
+          undo.disabled =
+            undoStack.length === 0 ||
+            thinking ||
+            replaying ||
+            chess.game_over() ||
+            clockExpired;
         }
 
         renderClocks();
@@ -3381,7 +3392,14 @@
       }
 
       function undoTurn() {
-        if (thinking || undoStack.length === 0 || replaying || puzzleMode)
+        if (
+          thinking ||
+          undoStack.length === 0 ||
+          replaying ||
+          puzzleMode ||
+          chess.game_over() ||
+          clockExpired
+        )
           return;
 
         let targetState = null;
