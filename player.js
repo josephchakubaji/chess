@@ -12,6 +12,7 @@
       computerMode: false,
       puzzleMode: false,
       timeControl: timeControl || "unlimited",
+      variant: "standard",
       color: null
     };
   }
@@ -24,6 +25,7 @@
       puzzleMode: false,
       roomCode: String(roomCode || "").toUpperCase(),
       host: Boolean(isHost),
+      variant: "standard",
       color: null
     };
   }

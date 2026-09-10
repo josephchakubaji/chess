@@ -105,7 +105,12 @@
           tactics, or challenge another player.
         </p>
         <!-- Rejoin in-progress game banner (shown dynamically) -->
-        <div class="rejoin-banner hidden" id="rejoinBanner" role="status" aria-live="polite">
+        <div
+          class="rejoin-banner hidden"
+          id="rejoinBanner"
+          role="status"
+          aria-live="polite"
+        >
           <div class="rejoin-banner-inner">
             <span class="rejoin-icon">♟</span>
             <div class="rejoin-text">
@@ -113,8 +118,16 @@
               <small id="rejoinMeta">Private room · Unlimited</small>
             </div>
             <div class="rejoin-actions">
-              <button class="btn rejoin-btn" id="rejoinBtn" type="button">↩ Rejoin</button>
-              <button class="text-btn rejoin-dismiss" id="rejoinDismissBtn" type="button">Dismiss</button>
+              <button class="btn rejoin-btn" id="rejoinBtn" type="button">
+                ↩ Rejoin
+              </button>
+              <button
+                class="text-btn rejoin-dismiss"
+                id="rejoinDismissBtn"
+                type="button"
+              >
+                Dismiss
+              </button>
             </div>
           </div>
         </div>
@@ -646,7 +659,9 @@
               <button class="btn" id="resetBtn">New game</button>
               <button class="btn" id="undoBtn">Undo move</button>
               <!-- shown only in private rooms: asks opponent to allow undo -->
-              <button class="btn btn-secondary hidden" id="requestUndoBtn">⟲ Request undo</button>
+              <button class="btn btn-secondary hidden" id="requestUndoBtn">
+                ⟲ Request undo
+              </button>
             </div>
 
             <div id="puzzleControls" class="puzzle-controls hidden">
@@ -750,14 +765,23 @@
       </div>
 
       <!-- Undo Request Modal (private rooms) -->
-      <div class="modal-overlay hidden" id="undoRequestModal" aria-modal="true" role="dialog">
+      <div
+        class="modal-overlay hidden"
+        id="undoRequestModal"
+        aria-modal="true"
+        role="dialog"
+      >
         <div class="modal-card undo-request-card">
           <div class="undo-request-icon">⟲</div>
           <h2 class="modal-title" id="undoRequestTitle">Undo Requested</h2>
-          <p class="modal-message" id="undoRequestMsg">Your opponent wants to take back their last move.</p>
+          <p class="modal-message" id="undoRequestMsg">
+            Your opponent wants to take back their last move.
+          </p>
           <div class="modal-actions">
             <button class="btn" id="undoAcceptBtn" type="button">Accept</button>
-            <button class="btn btn-secondary" id="undoDeclineBtn" type="button">Decline</button>
+            <button class="btn btn-secondary" id="undoDeclineBtn" type="button">
+              Decline
+            </button>
           </div>
         </div>
       </div>
@@ -1174,6 +1198,7 @@
         undoDeclineBtn = $("undoDeclineBtn");
       let authRegisterMode = false,
         currentUser = null,
+        currentUserProfile = null,
         activityChannel = null,
         activityPresence = {},
         authSubmitting = false,
@@ -1182,7 +1207,6 @@
       let activeGameMode = null; // 'private' | 'computer' | 'pass_and_play' — only 'private' is rated
       let resumableGame = null; // stored game from get_active_game()
       let undoRequestedByMe = false;
-
 
       function getRatingLevel(rating) {
         if (rating >= 1800) return "1800+ Expert";
@@ -1193,7 +1217,10 @@
       }
 
       async function loadUserRating() {
-        if (!currentUser) return null;
+        if (!currentUser) {
+          currentUserProfile = null;
+          return null;
+        }
         let { data, error: ratingError } =
           await supabaseClient.rpc("get_my_profile");
         let profile = Array.isArray(data) ? data[0] : data;
@@ -1209,10 +1236,12 @@
         }
 
         if (ratingError || !profile || profile.elo_rating == null) {
+          currentUserProfile = profile || null;
           ratingLabel.textContent = "Elo unavailable";
           ratingSummary.textContent = `Elo setup unavailable: ${ratingError?.message || "profile row not found"}. Run the profile SQL setup and refresh.`;
-          return null;
+          return profile || null;
         }
+        currentUserProfile = profile;
         const rating = Number(profile.elo_rating);
         const level = getRatingLevel(rating);
         ratingLabel.textContent = `Elo ${rating} · ${level}`;
@@ -1253,7 +1282,12 @@
           : '<tr><td colspan="6" class="history-empty">No registered players yet.</td></tr>';
       }
 
-      async function beginGameHistory(mode, opponent, timeControl, roomCode = null) {
+      async function beginGameHistory(
+        mode,
+        opponent,
+        timeControl,
+        roomCode = null,
+      ) {
         if (!currentUser) return;
         if (activeGameHistoryId)
           await finishGameHistory("abandoned", "New game started");
@@ -1265,7 +1299,8 @@
           status: "in_progress",
         };
         if (roomCode) insertPayload.room_code = roomCode;
-        if (chess && typeof chess.pgn === "function") insertPayload.pgn = chess.pgn();
+        if (chess && typeof chess.pgn === "function")
+          insertPayload.pgn = chess.pgn();
         const { data, error: historyError } = await supabaseClient
           .from("game_history")
           .insert(insertPayload)
@@ -1306,7 +1341,8 @@
         }
         try {
           let activeGame = null;
-          const { data: rpcData, error: rpcErr } = await supabaseClient.rpc("get_active_game");
+          const { data: rpcData, error: rpcErr } =
+            await supabaseClient.rpc("get_active_game");
           if (!rpcErr && rpcData && rpcData.length > 0) {
             activeGame = rpcData[0];
           } else {
@@ -1325,8 +1361,10 @@
 
           if (activeGame && activeGame.room_code) {
             resumableGame = activeGame;
-            if (rejoinTitle) rejoinTitle.textContent = `Game in progress: Room ${activeGame.room_code}`;
-            if (rejoinMeta) rejoinMeta.textContent = `Private match · ${activeGame.time_control || "Unlimited"}`;
+            if (rejoinTitle)
+              rejoinTitle.textContent = `Game in progress: Room ${activeGame.room_code}`;
+            if (rejoinMeta)
+              rejoinMeta.textContent = `Private match · ${activeGame.time_control || "Unlimited"}`;
             if (rejoinBanner) rejoinBanner.classList.remove("hidden");
           } else {
             resumableGame = null;
@@ -1357,7 +1395,11 @@
         // Elo is only updated for rated player-vs-player (private) games.
         // Computer and pass-and-play games are unrated.
         const isRated = gameMode === "private";
-        if (isRated && (status === "completed" || status === "draw") && result) {
+        if (
+          isRated &&
+          (status === "completed" || status === "draw") &&
+          result
+        ) {
           await supabaseClient.rpc("record_elo_result", {
             p_game_id: historyId,
             p_result: result,
@@ -1366,7 +1408,6 @@
         }
         void checkActiveGame();
       }
-
 
       async function loadGameHistory() {
         if (!currentUser) return;
@@ -1445,6 +1486,15 @@
 
       function getDisplayName(user = currentUser) {
         return user?.user_metadata?.display_name || user?.email || "Player";
+      }
+
+      function getPresencePayload(color = null) {
+        return {
+          playerId: id,
+          color,
+          displayName: getDisplayName(),
+          eloRating: currentUserProfile?.elo_rating ?? null,
+        };
       }
 
       function getActivityLabel() {
@@ -1579,6 +1629,7 @@
       async function handleAuthChange(user) {
         currentUser = user;
         if (!user) {
+          currentUserProfile = null;
           if (activityChannel)
             await supabaseClient.removeChannel(activityChannel);
           activityChannel = null;
@@ -2526,6 +2577,28 @@
         const topColor = isFlipped ? "w" : "b";
         const bottomColor = isFlipped ? "b" : "w";
 
+        function getPrivatePlayerLabel(col) {
+          const presenceList = players();
+          const player = presenceList.find((entry) => entry.color === col);
+
+          if (player) {
+            const name = player.displayName || "Player";
+            const rating =
+              player.eloRating != null ? ` (${Number(player.eloRating)})` : "";
+            return `${name}${rating}`;
+          }
+
+          if (col === color) {
+            const rating =
+              currentUserProfile?.elo_rating != null
+                ? ` (${Number(currentUserProfile.elo_rating)})`
+                : "";
+            return `${getDisplayName()}${rating}`;
+          }
+
+          return col === "w" ? "White" : "Black";
+        }
+
         function getTitle(col) {
           if (puzzleMode) {
             return col === color ? "You (Puzzle)" : "Target";
@@ -2534,8 +2607,7 @@
             return col === "b" ? `Computer (${difficulty})` : "You";
           }
           if (privateRoom) {
-            if (col === color) return "You";
-            return "Opponent";
+            return getPrivatePlayerLabel(col);
           }
           return col === "w" ? "White" : "Black";
         }
@@ -3073,61 +3145,42 @@
 
       // Positional piece-square tables to encourage king safety, pawn advance, piece centralization, and driving opponent king to corner
       const PAWN_PST = [
-        0,  0,  0,  0,  0,  0,  0,  0,
-        50, 50, 50, 50, 50, 50, 50, 50,
-        10, 10, 20, 30, 30, 20, 10, 10,
-        5,  5, 10, 25, 25, 10,  5,  5,
-        0,  0,  0, 20, 20,  0,  0,  0,
-        5, -5,-10,  0,  0,-10, -5,  5,
-        5, 10, 10,-20,-20, 10, 10,  5,
-        0,  0,  0,  0,  0,  0,  0,  0
+        0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 50, 50, 50, 50, 50, 50, 10, 10, 20, 30,
+        30, 20, 10, 10, 5, 5, 10, 25, 25, 10, 5, 5, 0, 0, 0, 20, 20, 0, 0, 0, 5,
+        -5, -10, 0, 0, -10, -5, 5, 5, 10, 10, -20, -20, 10, 10, 5, 0, 0, 0, 0,
+        0, 0, 0, 0,
       ];
       const KNIGHT_PST = [
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        -40,-20,  0,  0,  0,  0,-20,-40,
-        -30,  0, 10, 15, 15, 10,  0,-30,
-        -30,  5, 15, 20, 20, 15,  5,-30,
-        -30,  0, 15, 20, 20, 15,  0,-30,
-        -30,  5, 10, 15, 15, 10,  5,-30,
-        -40,-20,  0,  5,  5,  0,-20,-40,
-        -50,-40,-30,-30,-30,-30,-40,-50
+        -50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40,
+        -30, 0, 10, 15, 15, 10, 0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0,
+        15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10, 5, -30, -40, -20, 0, 5,
+        5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50,
       ];
       const BISHOP_PST = [
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        -10,  0,  5,  0,  0,  5,  0,-10,
-        -10, 10, 10, 10, 10, 10, 10,-10,
-        -10,  0, 10, 10, 10, 10,  0,-10,
-        -10,  5,  5, 10, 10,  5,  5,-10,
-        -10,  0,  5, 10, 10,  5,  0,-10,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -20,-10,-10,-10,-10,-10,-10,-20
+        -20, -10, -10, -10, -10, -10, -10, -20, -10, 0, 5, 0, 0, 5, 0, -10, -10,
+        10, 10, 10, 10, 10, 10, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 5, 5,
+        10, 10, 5, 5, -10, -10, 0, 5, 10, 10, 5, 0, -10, -10, 0, 0, 0, 0, 0, 0,
+        -10, -20, -10, -10, -10, -10, -10, -10, -20,
       ];
       const ROOK_PST = [
-          0,  0,  0,  0,  0,  0,  0,  0,
-          5, 10, 10, 10, 10, 10, 10,  5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-         -5,  0,  0,  0,  0,  0,  0, -5,
-          0,  0,  0,  5,  5,  0,  0,  0
+        0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, -5, 0, 0, 0, 0, 0,
+        0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0,
+        0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, 0, 0, 0, 5, 5, 0, 0, 0,
       ];
       const QUEEN_PST = [
-        -20,-10,-10, -5, -5,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5,  5,  5,  5,  0,-10,
-         -5,  0,  5,  5,  5,  5,  0, -5,
-          0,  0,  5,  5,  5,  5,  0, -5,
-        -10,  5,  5,  5,  5,  5,  0,-10,
-        -10,  0,  5,  0,  0,  0,  0,-10,
-        -20,-10,-10, -5, -5,-10,-10,-20
+        -20, -10, -10, -5, -5, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10,
+        0, 5, 5, 5, 5, 0, -10, -5, 0, 5, 5, 5, 5, 0, -5, 0, 0, 5, 5, 5, 5, 0,
+        -5, -10, 5, 5, 5, 5, 5, 0, -10, -10, 0, 5, 0, 0, 0, 0, -10, -20, -10,
+        -10, -5, -5, -10, -10, -20,
       ];
 
       function evaluate(position, depth = 0) {
         // Terminal checkmate: high bonus, favoring quicker checkmates
         if (position.in_checkmate()) {
           // The side whose turn it is has been mated
-          return position.turn() === "b" ? -(100000 + depth * 100) : (100000 + depth * 100);
+          return position.turn() === "b"
+            ? -(100000 + depth * 100)
+            : 100000 + depth * 100;
         }
         if (position.in_draw()) return 0;
 
@@ -3163,7 +3216,8 @@
 
         // King hunting in endgame: drive the opponent King to the corner
         if (whiteKingSq && blackKingSq) {
-          const whiteDistCenter = Math.abs(whiteKingSq.r - 3.5) + Math.abs(whiteKingSq.f - 3.5);
+          const whiteDistCenter =
+            Math.abs(whiteKingSq.r - 3.5) + Math.abs(whiteKingSq.f - 3.5);
           score += whiteDistCenter * 15; // penalize white king near center when black is hunting
         }
 
@@ -3189,14 +3243,18 @@
           const bCheck = b.san && b.san.includes("+") ? 500 : 0;
           const aCap = a.captured ? 200 : 0;
           const bCap = b.captured ? 200 : 0;
-          return (bCheck + bCap) - (aCheck + aCap);
+          return bCheck + bCap - (aCheck + aCap);
         });
 
         if (isMaximizing) {
           let maxEval = -Infinity;
           for (const move of legalMoves) {
             const next = new Chess(position.fen());
-            next.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+            next.move({
+              from: move.from,
+              to: move.to,
+              promotion: move.promotion || "q",
+            });
             const ev = minimax(next, depth - 1, alpha, beta, false);
             maxEval = Math.max(maxEval, ev);
             alpha = Math.max(alpha, ev);
@@ -3207,7 +3265,11 @@
           let minEval = Infinity;
           for (const move of legalMoves) {
             const next = new Chess(position.fen());
-            next.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+            next.move({
+              from: move.from,
+              to: move.to,
+              promotion: move.promotion || "q",
+            });
             const ev = minimax(next, depth - 1, alpha, beta, true);
             minEval = Math.min(minEval, ev);
             beta = Math.min(beta, ev);
@@ -3224,7 +3286,11 @@
         // 1. INSTANT CHECKMATE CHECK: If any move immediately delivers checkmate (#), take it!
         for (const move of moves) {
           const test = new Chess(chess.fen());
-          test.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+          test.move({
+            from: move.from,
+            to: move.to,
+            promotion: move.promotion || "q",
+          });
           if (test.in_checkmate()) {
             return move;
           }
@@ -3232,9 +3298,13 @@
 
         if (difficulty === "easy") {
           // Easy: 80% random, but 100% checkmates and captures if available
-          const checksOrCaps = moves.filter((m) => m.captured || (m.san && m.san.includes("+")));
+          const checksOrCaps = moves.filter(
+            (m) => m.captured || (m.san && m.san.includes("+")),
+          );
           if (checksOrCaps.length && Math.random() < 0.6) {
-            return checksOrCaps[Math.floor(Math.random() * checksOrCaps.length)];
+            return checksOrCaps[
+              Math.floor(Math.random() * checksOrCaps.length)
+            ];
           }
           return moves[Math.floor(Math.random() * moves.length)];
         }
@@ -3245,14 +3315,20 @@
 
         // Prioritize checks and captures first
         moves.sort((a, b) => {
-          const aPriority = (a.captured ? 10 : 0) + (a.san && a.san.includes("+") ? 20 : 0);
-          const bPriority = (b.captured ? 10 : 0) + (b.san && b.san.includes("+") ? 20 : 0);
+          const aPriority =
+            (a.captured ? 10 : 0) + (a.san && a.san.includes("+") ? 20 : 0);
+          const bPriority =
+            (b.captured ? 10 : 0) + (b.san && b.san.includes("+") ? 20 : 0);
           return bPriority - aPriority;
         });
 
         for (const move of moves) {
           const test = new Chess(chess.fen());
-          test.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+          test.move({
+            from: move.from,
+            to: move.to,
+            promotion: move.promotion || "q",
+          });
           // Black is maximizing
           const score = minimax(test, depth - 1, -Infinity, Infinity, false);
           if (score > bestScore) {
@@ -3263,7 +3339,9 @@
           }
         }
 
-        return bestMoves[Math.floor(Math.random() * bestMoves.length)] || moves[0];
+        return (
+          bestMoves[Math.floor(Math.random() * bestMoves.length)] || moves[0]
+        );
       }
 
       function computerMove() {
@@ -3285,7 +3363,11 @@
             undoStack.pop();
             return;
           }
-          chess.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+          chess.move({
+            from: move.from,
+            to: move.to,
+            promotion: move.promotion || "q",
+          });
           if (timedMode) clockMs.b += clockIncrement;
           lastMove = { from: move.from, to: move.to };
           moveHistory.push(chess.history().slice(-1)[0]);
@@ -3527,7 +3609,7 @@
         lobbyError.textContent = "";
         updateLobby();
         try {
-          const result = await channel.track({ playerId: id, color });
+          const result = await channel.track(getPresencePayload(color));
           if (result?.error) {
             lobbyError.textContent =
               "Could not save your side. Please try again.";
@@ -3552,13 +3634,25 @@
           : `Connected as ${color === "w" ? "White" : "Black"}`;
         chess.reset();
         gameInitialFen = chess.fen();
+
+        // Apply variant setup
+        if (state.variant === "chess960") {
+          chess.load(randomChess960Fen());
+          showToast("Chess960 starting position loaded.");
+        }
+
         lastMove = null;
         moveHistory = [];
         undoStack = [];
         selected = null;
         draw();
         show(game);
-        void beginGameHistory("private", "Private opponent", tc, currentRoomCode);
+        void beginGameHistory(
+          "private",
+          "Private opponent",
+          tc,
+          currentRoomCode,
+        );
         if (timedMode) startClock();
       }
 
@@ -3645,6 +3739,12 @@
             const assignedColor =
               message.payload.colors[id] || (host ? "w" : "b");
             color = assignedColor;
+            if (message.payload.variant) {
+              state.variant = message.payload.variant;
+              document.querySelectorAll(".variant-select").forEach((el) => {
+                el.value = state.variant;
+              });
+            }
             enterGame(message.payload.timeControl || selectedTimeControl);
           })
           .on("broadcast", { event: "move" }, function (message) {
@@ -3662,7 +3762,8 @@
           .on("broadcast", { event: "undo-request" }, function (message) {
             if (message.payload.requesterId === id) return;
             if (undoRequestMsg) {
-              undoRequestMsg.textContent = "Your opponent requested to take back their last move. Do you allow it?";
+              undoRequestMsg.textContent =
+                "Your opponent requested to take back their last move. Do you allow it?";
             }
             if (undoRequestModal) undoRequestModal.classList.remove("hidden");
           })
@@ -3672,7 +3773,8 @@
                 chess.load(message.payload.fen);
                 lastMove = message.payload.lastMove || null;
                 moveHistory = message.payload.history || [];
-                if (message.payload.clockMs) clockMs = { ...message.payload.clockMs };
+                if (message.payload.clockMs)
+                  clockMs = { ...message.payload.clockMs };
                 draw();
                 if (timedMode && !chess.game_over()) startClock();
                 void syncGamePgn();
@@ -3703,7 +3805,7 @@
             hideGameOverModal();
             modalShownForGame = false;
             show(lobby);
-            channel.track({ playerId: id, color: null });
+            channel.track(getPresencePayload(null));
             updateLobby();
           });
 
@@ -3714,7 +3816,7 @@
             await leavePrivate();
             return;
           }
-          await channel.track({ playerId: id, color: null });
+          await channel.track(getPresencePayload(null));
           updateLobby();
         });
       }
@@ -4084,7 +4186,11 @@
             await channel.send({
               type: "broadcast",
               event: "start",
-              payload: { colors, timeControl: selectedTimeControl },
+              payload: {
+                colors,
+                timeControl: selectedTimeControl,
+                variant: state.variant || "standard",
+              },
             });
           } catch (e) {
             console.log("Broadcast error:", e);
@@ -4140,7 +4246,7 @@
           hideGameOverModal();
           modalShownForGame = false;
           show(lobby);
-          await channel.track({ playerId: id, color: null });
+          await channel.track(getPresencePayload(null));
           updateLobby();
           return;
         }
@@ -4191,7 +4297,9 @@
       if (requestUndoBtn) {
         requestUndoBtn.onclick = async () => {
           if (!privateRoom || !channel || !started) {
-            showToast("Undo request is only available during an active private game.");
+            showToast(
+              "Undo request is only available during an active private game.",
+            );
             return;
           }
           if (undoRequestedByMe) {

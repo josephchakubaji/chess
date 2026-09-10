@@ -2069,6 +2069,12 @@ async function joinPrivate(code, isHost) {
     .on("broadcast", { event: "start" }, function (message) {
       const assignedColor = message.payload.colors[id] || (host ? "w" : "b");
       color = assignedColor;
+      if (message.payload.variant) {
+        state.variant = message.payload.variant;
+        document.querySelectorAll(".variant-select").forEach((el) => {
+          el.value = state.variant;
+        });
+      }
       enterGame(message.payload.timeControl || selectedTimeControl);
     })
     .on("broadcast", { event: "move" }, function (message) {
@@ -2320,7 +2326,7 @@ startPrivate.onclick = async () => {
       await channel.send({
         type: "broadcast",
         event: "start",
-        payload: { colors, timeControl: selectedTimeControl }
+        payload: { colors, timeControl: selectedTimeControl, variant: state.variant || "standard" }
       });
     } catch (e) {
       console.log("Broadcast error:", e);
