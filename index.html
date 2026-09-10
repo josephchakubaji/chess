@@ -2046,7 +2046,7 @@
           };
 
           const { data, error } = await supabaseClient.functions.invoke(
-            "smooth-task",
+            "save-daily-puzzle",
             { body: row },
           );
 
