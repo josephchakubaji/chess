@@ -1129,6 +1129,7 @@
         authSubmitting = false,
         authCooldownTimer = null;
       let activeGameHistoryId = null;
+      let activeGameMode = null; // 'private' | 'computer' | 'pass_and_play' — only 'private' is rated
 
       function getRatingLevel(rating) {
         if (rating >= 1800) return "1800+ Expert";
@@ -1220,15 +1221,19 @@
             historyError.message,
           );
           activeGameHistoryId = null;
+          activeGameMode = null;
           return;
         }
         activeGameHistoryId = data?.id || null;
+        activeGameMode = mode; // remember the mode so Elo is only updated for rated games
       }
 
       async function finishGameHistory(status, result) {
         if (!activeGameHistoryId) return;
         const historyId = activeGameHistoryId;
+        const gameMode = activeGameMode;
         activeGameHistoryId = null;
+        activeGameMode = null;
         await supabaseClient
           .from("game_history")
           .update({
@@ -1238,7 +1243,10 @@
           })
           .eq("id", historyId)
           .eq("user_id", currentUser.id);
-        if ((status === "completed" || status === "draw") && result) {
+        // Elo is only updated for rated player-vs-player (private) games.
+        // Computer and pass-and-play games are unrated.
+        const isRated = gameMode === "private";
+        if (isRated && (status === "completed" || status === "draw") && result) {
           await supabaseClient.rpc("record_elo_result", {
             p_game_id: historyId,
             p_result: result,
