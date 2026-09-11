@@ -78,6 +78,9 @@
         <button class="text-btn" id="authModeBtn" type="button">
           Need an account? Register
         </button>
+        <button class="text-btn" id="googleSignInBtn" type="button">
+          Continue with Google
+        </button>
         <button class="text-btn" id="forgotPasswordBtn" type="button">
           Forgot password? Send reset email
         </button>
@@ -1169,6 +1172,7 @@
         authNameLabel = $("authNameLabel"),
         authSubmitBtn = $("authSubmitBtn"),
         authModeBtn = $("authModeBtn"),
+        googleSignInBtn = $("googleSignInBtn"),
         authMessage = $("authMessage"),
         forgotPasswordBtn = $("forgotPasswordBtn"),
         accountLabel = $("accountLabel"),
@@ -3870,6 +3874,25 @@
       });
 
       authModeBtn.onclick = updateAuthMode;
+      googleSignInBtn.onclick = async () => {
+        if (authSubmitting) return;
+        authSubmitting = true;
+        googleSignInBtn.disabled = true;
+        setAuthMessage("Redirecting to Google...");
+
+        const { error } = await supabaseClient.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: AUTH_REDIRECT_URL,
+          },
+        });
+
+        if (error) {
+          setAuthMessage(error.message, true);
+          authSubmitting = false;
+          googleSignInBtn.disabled = false;
+        }
+      };
       forgotPasswordBtn.onclick = async () => {
         const email = authEmail.value.trim();
         if (!email) {
