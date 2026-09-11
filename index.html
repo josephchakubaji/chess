@@ -51,39 +51,49 @@
           Create an account or sign in to play and appear in the player activity
           list.
         </p>
-        <form id="authForm" class="auth-form">
-          <label for="authEmail">Email</label>
-          <input id="authEmail" type="email" autocomplete="email" required />
-          <label for="authPassword">Password</label>
-          <input
-            id="authPassword"
-            type="password"
-            autocomplete="current-password"
-            minlength="6"
-            required
-          />
-          <label id="authNameLabel" class="hidden" for="authName"
-            >Display name</label
-          >
-          <input
-            id="authName"
-            class="hidden"
-            type="text"
-            autocomplete="name"
-            maxlength="40"
-          />
-          <button class="btn" id="authSubmitBtn" type="submit">Sign in</button>
-          <p id="authMessage" class="auth-message" role="status"></p>
-        </form>
-        <button class="text-btn" id="authModeBtn" type="button">
-          Need an account? Register
-        </button>
-        <button class="text-btn" id="googleSignInBtn" type="button">
-          Continue with Google
-        </button>
-        <button class="text-btn" id="forgotPasswordBtn" type="button">
-          Forgot password? Send reset email
-        </button>
+        <div class="auth-card">
+          <form id="authForm" class="auth-form">
+            <label for="authEmail">Email</label>
+            <input id="authEmail" type="email" autocomplete="email" required />
+            <label for="authPassword">Password</label>
+            <input
+              id="authPassword"
+              type="password"
+              autocomplete="current-password"
+              minlength="6"
+              required
+            />
+            <label id="authNameLabel" class="hidden" for="authName"
+              >Display name</label
+            >
+            <input
+              id="authName"
+              class="hidden"
+              type="text"
+              autocomplete="name"
+              maxlength="40"
+            />
+            <button class="btn" id="authSubmitBtn" type="submit">
+              Sign in
+            </button>
+            <p id="authMessage" class="auth-message" role="status"></p>
+          </form>
+
+          <div class="auth-actions">
+            <button class="btn btn-secondary" id="googleSignInBtn" type="button">
+              Continue with Google
+            </button>
+          </div>
+
+          <div class="auth-links">
+            <button class="text-btn" id="authModeBtn" type="button">
+              Need an account? Register
+            </button>
+            <button class="text-btn" id="forgotPasswordBtn" type="button">
+              Forgot password? Send reset email
+            </button>
+          </div>
+        </div>
       </section>
 
       <section class="screen hidden" id="adminScreen">
