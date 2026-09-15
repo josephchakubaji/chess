@@ -414,7 +414,7 @@ select cron.schedule(
     url := 'https://yaauwnvcjjetdybeixfr.supabase.co/functions/v1/cron-save-daily-puzzle',
     headers := jsonb_build_object(
       'Content-Type',  'application/json',
-      -- vault.decrypted_secrets stores CRON_SECRET set via `supabase secrets set`
+      -- Read the copy stored with vault.create_secret above.
       'Authorization', 'Bearer ' || (
         select decrypted_secret
         from vault.decrypted_secrets
