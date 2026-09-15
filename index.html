@@ -34,22 +34,16 @@
       <span class="piece-twenty">♙</span>
     </div>
     <main class="app">
-      <header class="app-header">
-        <h1 class="brand">
-          <button
-            type="button"
-            class="brand-home"
-            id="homeLogoBtn"
-            aria-label="Go to home page"
-          >
-            Chess<span>.</span>
-          </button>
-        </h1>
-        <button class="account-auth" id="signOutBtn" type="button">
-          <span class="account-auth-icon" aria-hidden="true">↗</span>
-          <span class="account-auth-label">Sign out</span>
+      <h1 class="brand">
+        <button
+          type="button"
+          class="brand-home"
+          id="homeLogoBtn"
+          aria-label="Go to home page"
+        >
+          Chess<span>.</span>
         </button>
-      </header>
+      </h1>
 
       <section class="screen" id="authScreen">
         <h2 id="authTitle">Sign in to Chess</h2>
@@ -211,6 +205,9 @@
           <button class="account-action" id="leaderboardBtn" type="button">
             <span class="action-icon" aria-hidden="true">♛</span>
             Leaderboard
+          </button>
+          <button class="text-btn" id="signOutBtn" type="button">
+            Sign out
           </button>
         </div>
       </section>
@@ -1659,8 +1656,7 @@
           adminBtn.classList.add("hidden");
           historyBtn.classList.add("hidden");
           leaderboardBtn.classList.add("hidden");
-          signOutBtn.querySelector(".account-auth-label").textContent =
-            "Sign in";
+          signOutBtn.textContent = "Sign in";
           show(authScreen);
           return;
         }
@@ -1668,8 +1664,7 @@
         adminBtn.classList.toggle("hidden", !isAdminUser(user));
         historyBtn.classList.remove("hidden");
         leaderboardBtn.classList.remove("hidden");
-        signOutBtn.querySelector(".account-auth-label").textContent =
-          "Sign out";
+        signOutBtn.textContent = "Sign out";
         await loadUserRating();
         await startActivityPresence();
         restoreAppState();
