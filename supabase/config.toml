@@ -1,0 +1,2 @@
+[functions.cron-save-daily-puzzle]
+verify_jwt = false

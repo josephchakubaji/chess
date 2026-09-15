@@ -388,8 +388,11 @@ delete from public.daily_puzzles where source != 'lichess-api';
 --        supabase functions deploy cron-save-daily-puzzle
 --   2. Set the shared secret (use any long random string):
 --        supabase secrets set CRON_SECRET=<your-random-secret>
---   3. Run this SQL file in the Supabase SQL Editor.
---   4. The cron job will fire automatically every night at 23:45 UTC.
+--   3. Store the same secret in Supabase Vault (the cron job reads Vault,
+--      while the edge function reads its environment secret):
+--        select vault.create_secret('<your-random-secret>', 'CRON_SECRET');
+--   4. Run this SQL file in the Supabase SQL Editor.
+--   5. The cron job will fire automatically every night at 23:45 UTC.
 -- ============================================================
 
 -- Enable required extensions
