@@ -408,8 +408,7 @@ select cron.schedule(
   '45 23 * * *',                    -- cron expression: 23:45 UTC daily
   $$
   select net.http_post(
-    -- Replace <PROJECT_REF> with your actual Supabase project reference ID
-    url := 'https://<PROJECT_REF>.supabase.co/functions/v1/cron-save-daily-puzzle',
+    url := 'https://yaauwnvcjjetdybeixfr.supabase.co/functions/v1/cron-save-daily-puzzle',
     headers := jsonb_build_object(
       'Content-Type',  'application/json',
       -- vault.decrypted_secrets stores CRON_SECRET set via `supabase secrets set`
@@ -430,7 +429,7 @@ select cron.schedule(
 -- (run this in the SQL editor whenever you need a one-off save)
 -- -------------------------------------------------------
 -- select net.http_post(
---   url := 'https://<PROJECT_REF>.supabase.co/functions/v1/cron-save-daily-puzzle',
+--   url := 'https://yaauwnvcjjetdybeixfr.supabase.co/functions/v1/cron-save-daily-puzzle',
 --   headers := jsonb_build_object(
 --     'Content-Type',  'application/json',
 --     'Authorization', 'Bearer ' || (
