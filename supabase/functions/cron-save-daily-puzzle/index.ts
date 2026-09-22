@@ -1,7 +1,7 @@
 /**
  * cron-save-daily-puzzle
  *
- * Called by pg_cron at 23:45 UTC every day via pg_net.
+ * Called by pg_cron at 00:05 UTC every day via pg_net, after the UTC rollover.
  * Fetches the current Lichess daily puzzle and upserts it into daily_puzzles.
  * Uses the service-role key internally — no user session required.
  *

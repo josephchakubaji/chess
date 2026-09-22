@@ -379,8 +379,8 @@ delete from public.daily_puzzles where source != 'lichess-api';
 -- AUTOMATED DAILY PUZZLE ARCHIVING
 -- ============================================================
 -- Requires pg_cron and pg_net extensions (enabled by default on Supabase).
--- The cron job runs at 23:45 UTC every day, calling the
--- `cron-save-daily-puzzle` edge function before Lichess rotates
+-- The cron job runs at 00:05 UTC every day, calling the
+-- `cron-save-daily-puzzle` edge function after Lichess rotates
 -- to the next puzzle at midnight UTC.
 --
 -- SETUP STEPS:
@@ -392,7 +392,7 @@ delete from public.daily_puzzles where source != 'lichess-api';
 --      while the edge function reads its environment secret):
 --        select vault.create_secret('<your-random-secret>', 'CRON_SECRET');
 --   4. Run this SQL file in the Supabase SQL Editor.
---   5. The cron job will fire automatically every night at 23:45 UTC.
+--   5. The cron job will fire automatically every day at 00:05 UTC.
 -- ============================================================
 
 -- Enable required extensions
@@ -405,10 +405,10 @@ where exists (
   select 1 from cron.job where jobname = 'archive-lichess-daily-puzzle'
 );
 
--- Schedule the job: every day at 23:45 UTC
+-- Schedule the job: every day at 00:05 UTC, after the Lichess rollover
 select cron.schedule(
   'archive-lichess-daily-puzzle',   -- unique job name
-  '45 23 * * *',                    -- cron expression: 23:45 UTC daily
+  '5 0 * * *',                      -- cron expression: 00:05 UTC daily
   $$
   select net.http_post(
     url := 'https://yaauwnvcjjetdybeixfr.supabase.co/functions/v1/cron-save-daily-puzzle',
