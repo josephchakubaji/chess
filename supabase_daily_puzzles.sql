@@ -56,6 +56,25 @@ using (auth.role() = 'authenticated');
 -- Daily puzzle writes are server-only. Use the save-daily-puzzle edge function
 -- with its service-role key; never expose that key in browser code.
 
+-- Supabase Auth owns auth.users, so email validation and plus-address rejection
+-- are enforced in the client auth form rather than with an auth.users trigger.
+
+-- Backend-owned email claims prevent plus-address aliases and signup races.
+create table if not exists public.auth_email_claims (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+
+alter table public.auth_email_claims enable row level security;
+revoke all on public.auth_email_claims from anon, authenticated;
+
+insert into public.auth_email_claims (email)
+select distinct lower(split_part(split_part(email, '@', 1), '+', 1)
+  || '@' || split_part(email, '@', 2))
+from auth.users
+where email is not null
+on conflict (email) do nothing;
+
 create table if not exists public.game_history (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -161,27 +180,6 @@ create policy "Users can view their own profile"
 on public.profiles
 for select
 using (auth.uid() = id);
-
-create or replace function public.create_profile_for_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles (id, display_name)
-  values (new.id, new.raw_user_meta_data ->> 'display_name')
-  on conflict (id) do nothing;
-  return new;
-end;
-$$;
-
-drop trigger if exists on_auth_user_created_profile on auth.users;
-create trigger on_auth_user_created_profile
-after insert on auth.users
-for each row execute function public.create_profile_for_user();
-
-revoke all on function public.create_profile_for_user() from public;
 
 create or replace function public.get_my_profile()
 returns public.profiles
