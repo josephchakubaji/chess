@@ -1635,6 +1635,31 @@
         setAuthMessage("");
       }
 
+      function containsEmoji(value) {
+        return /\p{Extended_Pictographic}/u.test(value);
+      }
+
+      function validateAuthCredentials(email, password) {
+        if (
+          !email ||
+          !/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/.test(email)
+        ) {
+          return "Use a valid email address with standard ASCII characters only.";
+        }
+        const atIndex = email.lastIndexOf("@");
+        const localPart = email.slice(0, atIndex);
+        if (localPart.includes("+")) {
+          return "Email extensions such as name+tag@example.com are not allowed.";
+        }
+        if (containsEmoji(email)) {
+          return "Emoji characters cannot be used in an email address.";
+        }
+        if (containsEmoji(password)) {
+          return "Emoji characters cannot be used in a password.";
+        }
+        return "";
+      }
+
       async function initializeAuth() {
         showAuthRedirectError();
         const { data } = await supabaseClient.auth.getSession();
@@ -3917,6 +3942,12 @@
           authEmail.focus();
           return;
         }
+        const credentialError = validateAuthCredentials(email, "");
+        if (credentialError) {
+          setAuthMessage(credentialError, true);
+          authEmail.focus();
+          return;
+        }
         if (authSubmitting) return;
         authSubmitting = true;
         forgotPasswordBtn.disabled = true;
@@ -3950,6 +3981,13 @@
         );
         const email = authEmail.value.trim();
         const password = authPassword.value;
+        const credentialError = validateAuthCredentials(email, password);
+        if (credentialError) {
+          setAuthMessage(credentialError, true);
+          authSubmitting = false;
+          authSubmitBtn.disabled = false;
+          return;
+        }
         try {
           const result = authRegisterMode
             ? await supabaseClient.auth.signUp({
