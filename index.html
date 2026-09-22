@@ -4003,16 +4003,26 @@
           return;
         }
         try {
-          const result = authRegisterMode
-            ? await supabaseClient.auth.signUp({
+          let result;
+          if (authRegisterMode) {
+            const registration = await supabaseClient.functions.invoke(
+              "register-user",
+              { body: { email, password, displayName } },
+            );
+            if (registration.error) {
+              result = { error: registration.error };
+            } else {
+              result = await supabaseClient.auth.signInWithPassword({
                 email,
                 password,
-                options: {
-                  data: { display_name: displayName },
-                  emailRedirectTo: AUTH_REDIRECT_URL,
-                },
-              })
-            : await supabaseClient.auth.signInWithPassword({ email, password });
+              });
+            }
+          } else {
+            result = await supabaseClient.auth.signInWithPassword({
+              email,
+              password,
+            });
+          }
           const errorStatus = result.error?.status || result.error?.statusCode;
           if (result.error) {
             if (
