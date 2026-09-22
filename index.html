@@ -3976,6 +3976,20 @@
         forgotPasswordBtn.disabled = false;
       };
 
+      async function getEdgeFunctionError(error) {
+        const response = error?.context;
+        if (response && typeof response.clone === "function") {
+          try {
+            const payload = await response.clone().json();
+            if (payload?.error) return payload.error;
+            if (payload?.message) return payload.message;
+          } catch (_e) {
+            // Use the SDK message when the response is not JSON.
+          }
+        }
+        return error?.message || "The request could not be completed.";
+      }
+
       authForm.onsubmit = async (event) => {
         event.preventDefault();
         if (authSubmitting) return;
@@ -4010,7 +4024,10 @@
               { body: { email, password, displayName } },
             );
             if (registration.error) {
-              result = { error: registration.error };
+              result = {
+                error: registration.error,
+                message: await getEdgeFunctionError(registration.error),
+              };
             } else {
               result = await supabaseClient.auth.signInWithPassword({
                 email,
@@ -4037,7 +4054,7 @@
                 authCooldownTimer = null;
               }, 60000);
             } else {
-              setAuthMessage(result.error.message, true);
+              setAuthMessage(result.message || result.error.message, true);
             }
             return;
           }
