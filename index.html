@@ -2232,7 +2232,10 @@
         try {
           const res = await fetch(`${DAILY_PUZZLE_API}?date=${todayKey}`, {
             cache: "no-store",
-            headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+            headers: {
+              Accept: "application/json",
+              "Cache-Control": "no-cache",
+            },
           });
           if (!res.ok) return;
           const data = await res.json();
@@ -2296,7 +2299,10 @@
               .neq("date", todayKey)
               .maybeSingle();
             if (duplicate) {
-              console.warn("Lichess returned an already archived daily puzzle:", apiPuzzle.sourcePuzzleId);
+              console.warn(
+                "Lichess returned an already archived daily puzzle:",
+                apiPuzzle.sourcePuzzleId,
+              );
               return;
             }
 
