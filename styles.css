@@ -73,6 +73,59 @@
   padding: 0.4rem 0;
 }
 
+.account-settings-card {
+  max-height: min(92vh, 720px);
+  overflow-y: auto;
+  text-align: left;
+}
+
+.account-settings-card .modal-title,
+.account-settings-card .modal-message {
+  text-align: center;
+}
+
+.settings-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+
+.settings-form + .settings-form {
+  border-top: 1px solid var(--line);
+  padding-top: 1.25rem;
+}
+
+.settings-form label {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.settings-form input {
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.settings-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(231, 111, 81, 0.12);
+  outline: none;
+}
+
+.settings-form .btn {
+  margin-top: 0.25rem;
+  width: 100%;
+}
+
+.account-settings-card .modal-actions {
+  margin-top: 1rem;
+}
+
 .account-bar,
 .admin-header,
 .admin-player-row {

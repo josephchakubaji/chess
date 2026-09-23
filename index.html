@@ -206,6 +206,10 @@
             <span class="action-icon" aria-hidden="true">♛</span>
             Leaderboard
           </button>
+          <button class="account-action" id="accountSettingsBtn" type="button">
+            <span class="action-icon" aria-hidden="true">⚙</span>
+            Account settings
+          </button>
           <button class="text-btn" id="signOutBtn" type="button">
             Sign out
           </button>
@@ -828,6 +832,65 @@
           </div>
         </div>
       </div>
+
+      <div
+        class="modal-overlay hidden"
+        id="accountSettingsModal"
+        aria-modal="true"
+        role="dialog"
+        aria-labelledby="accountSettingsTitle"
+      >
+        <div class="modal-card account-settings-card">
+          <h2 class="modal-title" id="accountSettingsTitle">
+            Account settings
+          </h2>
+          <p class="modal-message">Update your profile details securely.</p>
+          <form id="displayNameForm" class="settings-form">
+            <label for="settingsDisplayName">Display name</label>
+            <input
+              id="settingsDisplayName"
+              type="text"
+              autocomplete="name"
+              maxlength="40"
+              required
+            />
+            <button class="btn" id="saveDisplayNameBtn" type="submit">
+              Save display name
+            </button>
+          </form>
+          <form id="passwordForm" class="settings-form">
+            <label for="settingsPassword">New password</label>
+            <input
+              id="settingsPassword"
+              type="password"
+              autocomplete="new-password"
+              minlength="6"
+              required
+            />
+            <label for="settingsPasswordConfirm">Confirm new password</label>
+            <input
+              id="settingsPasswordConfirm"
+              type="password"
+              autocomplete="new-password"
+              minlength="6"
+              required
+            />
+            <button
+              class="btn btn-secondary"
+              id="savePasswordBtn"
+              type="submit"
+            >
+              Change password
+            </button>
+          </form>
+          <p id="accountSettingsMessage" class="auth-message" role="status"></p>
+          <div class="modal-actions">
+            <button class="text-btn" id="closeAccountSettingsBtn" type="button">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
     </main>
 
     <script src="puzzles.js?v=1"></script>
@@ -1192,6 +1255,15 @@
         accountLabel = $("accountLabel"),
         adminBtn = $("adminBtn"),
         signOutBtn = $("signOutBtn"),
+        accountSettingsBtn = $("accountSettingsBtn"),
+        accountSettingsModal = $("accountSettingsModal"),
+        displayNameForm = $("displayNameForm"),
+        settingsDisplayName = $("settingsDisplayName"),
+        passwordForm = $("passwordForm"),
+        settingsPassword = $("settingsPassword"),
+        settingsPasswordConfirm = $("settingsPasswordConfirm"),
+        accountSettingsMessage = $("accountSettingsMessage"),
+        closeAccountSettingsBtn = $("closeAccountSettingsBtn"),
         adminBackBtn = $("adminBackBtn"),
         adminPlayers = $("adminPlayers"),
         historyBtn = $("historyBtn"),
@@ -1595,6 +1667,26 @@
       function setAuthMessage(message, isError = false) {
         authMessage.textContent = message;
         authMessage.classList.toggle("error", isError);
+      }
+
+      function setAccountSettingsMessage(message, isError = false) {
+        accountSettingsMessage.textContent = message;
+        accountSettingsMessage.classList.toggle("error", isError);
+      }
+
+      function closeAccountSettings() {
+        accountSettingsModal.classList.add("hidden");
+        setAccountSettingsMessage("");
+        displayNameForm.reset();
+        passwordForm.reset();
+      }
+
+      function openAccountSettings() {
+        if (!currentUser) return;
+        settingsDisplayName.value = getDisplayName();
+        setAccountSettingsMessage("");
+        accountSettingsModal.classList.remove("hidden");
+        settingsDisplayName.focus();
       }
 
       function showAuthRedirectError() {
@@ -4012,6 +4104,90 @@
           return;
         }
         await supabaseClient.auth.signOut();
+      };
+      accountSettingsBtn.onclick = openAccountSettings;
+      closeAccountSettingsBtn.onclick = closeAccountSettings;
+      accountSettingsModal.onclick = (event) => {
+        if (event.target === accountSettingsModal) closeAccountSettings();
+      };
+      displayNameForm.onsubmit = async (event) => {
+        event.preventDefault();
+        const displayName = settingsDisplayName.value.trim();
+        if (!displayName || displayName.length > 40) {
+          setAccountSettingsMessage(
+            "Use a display name between 1 and 40 characters.",
+            true,
+          );
+          return;
+        }
+        if (containsEmoji(displayName)) {
+          setAccountSettingsMessage(
+            "Emoji characters cannot be used in a display name.",
+            true,
+          );
+          return;
+        }
+
+        const saveButton = $("saveDisplayNameBtn");
+        saveButton.disabled = true;
+        setAccountSettingsMessage("Saving display name...");
+        const { error: profileError } = await supabaseClient.rpc(
+          "update_my_display_name",
+          { p_display_name: displayName },
+        );
+        if (profileError) {
+          setAccountSettingsMessage(profileError.message, true);
+          saveButton.disabled = false;
+          return;
+        }
+        const { data, error: authError } = await supabaseClient.auth.updateUser(
+          {
+            data: { display_name: displayName },
+          },
+        );
+        if (authError) {
+          setAccountSettingsMessage(authError.message, true);
+        } else {
+          currentUser = data.user || currentUser;
+          accountLabel.textContent = `${getDisplayName()}${isAdminUser(currentUser) ? " (Admin)" : ""}`;
+          await updateActivityPresence();
+          setAccountSettingsMessage("Display name updated.");
+        }
+        saveButton.disabled = false;
+      };
+      passwordForm.onsubmit = async (event) => {
+        event.preventDefault();
+        const password = settingsPassword.value;
+        if (password.length < 6) {
+          setAccountSettingsMessage(
+            "Your new password must be at least 6 characters.",
+            true,
+          );
+          return;
+        }
+        if (containsEmoji(password)) {
+          setAccountSettingsMessage(
+            "Emoji characters cannot be used in a password.",
+            true,
+          );
+          return;
+        }
+        if (password !== settingsPasswordConfirm.value) {
+          setAccountSettingsMessage("The passwords do not match.", true);
+          return;
+        }
+
+        const saveButton = $("savePasswordBtn");
+        saveButton.disabled = true;
+        setAccountSettingsMessage("Changing password...");
+        const { error } = await supabaseClient.auth.updateUser({ password });
+        if (error) {
+          setAccountSettingsMessage(error.message, true);
+        } else {
+          passwordForm.reset();
+          setAccountSettingsMessage("Password changed successfully.");
+        }
+        saveButton.disabled = false;
       };
       adminBtn.onclick = () => {
         renderAdminPlayers();
