@@ -859,6 +859,13 @@
             </button>
           </form>
           <form id="passwordForm" class="settings-form">
+            <label for="settingsCurrentPassword">Current password</label>
+            <input
+              id="settingsCurrentPassword"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
             <label for="settingsPassword">New password</label>
             <input
               id="settingsPassword"
@@ -1260,6 +1267,7 @@
         displayNameForm = $("displayNameForm"),
         settingsDisplayName = $("settingsDisplayName"),
         passwordForm = $("passwordForm"),
+        settingsCurrentPassword = $("settingsCurrentPassword"),
         settingsPassword = $("settingsPassword"),
         settingsPasswordConfirm = $("settingsPasswordConfirm"),
         accountSettingsMessage = $("accountSettingsMessage"),
@@ -4157,7 +4165,12 @@
       };
       passwordForm.onsubmit = async (event) => {
         event.preventDefault();
+        const currentPassword = settingsCurrentPassword.value;
         const password = settingsPassword.value;
+        if (!currentUser?.email || !currentPassword) {
+          setAccountSettingsMessage("Enter your current password first.", true);
+          return;
+        }
         if (password.length < 6) {
           setAccountSettingsMessage(
             "Your new password must be at least 6 characters.",
@@ -4179,6 +4192,17 @@
 
         const saveButton = $("savePasswordBtn");
         saveButton.disabled = true;
+        setAccountSettingsMessage("Checking current password...");
+        const { error: verificationError } =
+          await supabaseClient.auth.signInWithPassword({
+            email: normalizeAuthEmail(currentUser.email),
+            password: currentPassword,
+          });
+        if (verificationError) {
+          setAccountSettingsMessage("Current password is incorrect.", true);
+          saveButton.disabled = false;
+          return;
+        }
         setAccountSettingsMessage("Changing password...");
         const { error } = await supabaseClient.auth.updateUser({ password });
         if (error) {

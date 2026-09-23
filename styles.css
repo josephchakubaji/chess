@@ -337,6 +337,10 @@
     width: 100%;
   }
 
+  #accountSettingsBtn {
+    grid-column: span 2;
+  }
+
   .admin-header,
   .admin-player-row {
     align-items: flex-start;
@@ -347,6 +351,35 @@
     overflow: visible;
   }
 
+  .account-settings-card {
+    max-height: calc(100dvh - 24px);
+    padding: 24px 18px;
+  }
+
+  .account-settings-card .modal-title {
+    font-size: 1.7rem;
+  }
+
+  .account-settings-card .modal-message {
+    font-size: 1rem;
+    margin-bottom: 16px;
+  }
+
+
+@media (max-width: 380px) {
+  .account-settings-card {
+    padding: 20px 14px;
+  }
+
+  .account-settings-card .modal-title {
+    font-size: 1.5rem;
+  }
+
+  .settings-form input,
+  .settings-form .btn {
+    font-size: 0.92rem;
+  }
+}
   .history-table,
   .history-table thead,
   .history-table tbody,
