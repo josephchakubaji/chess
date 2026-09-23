@@ -23,12 +23,22 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const accessToken = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!accessToken) {
+      return Response.json({ error: "Authentication required" }, { status: 401, headers: corsHeaders });
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+    if (userError || !userData.user) {
+      return Response.json({ error: "Invalid authentication token" }, { status: 401, headers: corsHeaders });
+    }
+
     const body = await req.json();
     if (!body?.date || !body?.fen || !Array.isArray(body.solution) || body.solution.length === 0) {
       return Response.json({ error: "date, fen, and solution are required" }, { status: 400, headers: corsHeaders });
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
     const row = {
       date: body.date,
       puzzle_id: body.puzzle_id || `daily_${body.date}`,

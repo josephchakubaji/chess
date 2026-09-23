@@ -633,6 +633,39 @@ function rowToDailyPuzzle(row) {
   };
 }
 
+function dailyHash(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function buildDailyPuzzleToSave(todayKey) {
+  const puzzle = PUZZLES[Math.abs(dailyHash(todayKey)) % PUZZLES.length];
+  return {
+    date: todayKey,
+    puzzle_id: `daily_${todayKey}_${puzzle.id}`,
+    title: puzzle.title,
+    category: puzzle.category,
+    goal: puzzle.goal,
+    fen: puzzle.fen,
+    solution: puzzle.solution,
+    hint: puzzle.hint,
+    source: "supabase"
+  };
+}
+
+async function saveDailyPuzzleToSupabase(puzzle) {
+  const { data, error } = await supabaseClient.functions.invoke(
+    "save-daily-puzzle",
+    { body: puzzle }
+  );
+  if (error) throw error;
+  return data?.puzzle ? rowToDailyPuzzle(data.puzzle) : null;
+}
+
 async function loadDailyPuzzleFromSupabase(todayKey) {
   try {
     const { data, error } = await supabaseClient
@@ -641,7 +674,16 @@ async function loadDailyPuzzleFromSupabase(todayKey) {
       .eq("date", todayKey)
       .maybeSingle();
     if (error) throw error;
-    if (!data) return;
+    if (!data) {
+      const savedPuzzle = await saveDailyPuzzleToSupabase(buildDailyPuzzleToSave(todayKey));
+      if (!savedPuzzle) return;
+      dailyPuzzle = savedPuzzle;
+      cacheDailyPuzzle(savedPuzzle, todayKey);
+      dailyArchiveLoaded = false;
+      renderDailyPuzzleBanner();
+      await loadArchivedDailyPuzzles(true);
+      return;
+    }
 
     const savedPuzzle = rowToDailyPuzzle(data);
     if (savedPuzzle.date === todayKey) {

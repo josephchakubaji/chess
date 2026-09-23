@@ -2024,6 +2024,30 @@
         };
       }
 
+      function buildDailyPuzzleToSave(todayKey) {
+        const puzzle = PUZZLES[dailyHash(todayKey) % PUZZLES.length];
+        return {
+          date: todayKey,
+          puzzle_id: `daily_${todayKey}_${puzzle.id}`,
+          title: puzzle.title,
+          category: puzzle.category,
+          goal: puzzle.goal,
+          fen: puzzle.fen,
+          solution: puzzle.solution,
+          hint: puzzle.hint,
+          source: "supabase",
+        };
+      }
+
+      async function saveDailyPuzzleToSupabase(puzzle) {
+        const { data, error } = await supabaseClient.functions.invoke(
+          "save-daily-puzzle",
+          { body: puzzle },
+        );
+        if (error) throw error;
+        return data?.puzzle ? rowToDailyPuzzle(data.puzzle) : null;
+      }
+
       function getDailyHint(puzzle) {
         const solution = Array.isArray(puzzle?.solution) ? puzzle.solution : [];
         const target = solution[currentPuzzleStep] || solution[0];
@@ -2082,7 +2106,18 @@
             .eq("date", todayKey)
             .maybeSingle();
           if (error) throw error;
-          if (!data) return;
+          if (!data) {
+            const savedPuzzle = await saveDailyPuzzleToSupabase(
+              buildDailyPuzzleToSave(todayKey),
+            );
+            if (!savedPuzzle) return;
+            dailyPuzzle = savedPuzzle;
+            cacheDailyPuzzle(savedPuzzle, todayKey);
+            dailyArchiveLoaded = false;
+            renderDailyPuzzleBanner();
+            await loadArchivedDailyPuzzles(true);
+            return;
+          }
 
           const savedPuzzle = rowToDailyPuzzle(data);
           if (savedPuzzle.date === todayKey) {
