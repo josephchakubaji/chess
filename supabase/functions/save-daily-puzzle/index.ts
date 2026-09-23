@@ -272,6 +272,28 @@ Deno.serve(async (req) => {
       };
     }
 
+    const sourcePuzzleId = row.source_puzzle_id;
+    const { data: duplicate } = sourcePuzzleId
+      ? await supabase
+        .from("daily_puzzles")
+        .select("date,puzzle_id")
+        .eq("source", "lichess-api")
+        .eq("source_puzzle_id", sourcePuzzleId)
+        .neq("date", targetDate)
+        .maybeSingle()
+      : { data: null };
+
+    if (duplicate) {
+      return Response.json(
+        {
+          error: "Lichess returned a puzzle already archived on another date",
+          source_puzzle_id: sourcePuzzleId,
+          existing_date: duplicate.date,
+        },
+        { status: 409, headers: corsHeaders },
+      );
+    }
+
     // Save/upsert to Supabase daily_puzzles table
     const { data: saved, error } = await supabase
       .from("daily_puzzles")
