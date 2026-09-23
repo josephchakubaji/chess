@@ -10,24 +10,16 @@ create table if not exists public.daily_puzzles (
   hint text,
   rating integer,
   themes text[] not null default '{}',
-  source text not null default 'lichess-api',
+  source text not null default 'supabase',
   raw_payload jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
--- A Lichess puzzle must only be archived once.
-delete from public.daily_puzzles older
-using public.daily_puzzles newer
-where older.source = 'lichess-api'
-  and newer.source = 'lichess-api'
-  and older.source_puzzle_id is not null
-  and older.source_puzzle_id = newer.source_puzzle_id
-  and older.date < newer.date;
-
-create unique index if not exists daily_puzzles_source_puzzle_id_key
+drop index if exists public.daily_puzzles_source_puzzle_id_key;
+create unique index daily_puzzles_source_puzzle_id_key
 on public.daily_puzzles (source_puzzle_id)
-where source = 'lichess-api' and source_puzzle_id is not null;
+where source_puzzle_id is not null;
 
 create or replace function public.set_daily_puzzles_updated_at()
 returns trigger
@@ -383,16 +375,12 @@ to authenticated
 using (realtime.topic() like 'chess-%')
 with check (realtime.topic() like 'chess-%');
 
--- One-time cleanup query: purge any seeded practice puzzles from the daily table
-delete from public.daily_puzzles where source != 'lichess-api';
-
 -- ============================================================
 -- AUTOMATED DAILY PUZZLE ARCHIVING
 -- ============================================================
 -- Requires pg_cron and pg_net extensions (enabled by default on Supabase).
--- The cron job runs at 00:05 UTC every day, calling the
--- `cron-save-daily-puzzle` edge function after Lichess rotates
--- to the next puzzle at midnight UTC.
+-- The cron job runs at 00:05 UTC every day, checking that today's
+-- `public.daily_puzzles` row exists.
 --
 -- SETUP STEPS:
 --   1. Deploy the edge function:
@@ -411,14 +399,14 @@ create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
 -- Remove any previous version of this job before recreating
-select cron.unschedule('archive-lichess-daily-puzzle')
+select cron.unschedule('verify-daily-puzzle')
 where exists (
-  select 1 from cron.job where jobname = 'archive-lichess-daily-puzzle'
+  select 1 from cron.job where jobname = 'verify-daily-puzzle'
 );
 
--- Schedule the job: every day at 00:05 UTC, after the Lichess rollover
+-- Schedule the job: every day at 00:05 UTC
 select cron.schedule(
-  'archive-lichess-daily-puzzle',   -- unique job name
+  'verify-daily-puzzle',             -- unique job name
   '5 0 * * *',                      -- cron expression: 00:05 UTC daily
   $$
   select net.http_post(
