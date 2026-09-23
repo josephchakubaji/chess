@@ -4,6 +4,13 @@ import { Chess } from "npm:chess.js@1.0.0";
 
 const LICHESS_DAILY_API = "https://lichess.org/api/puzzle/daily";
 
+async function fetchLichessDaily() {
+  return fetch(`${LICHESS_DAILY_API}?date=${new Date().toISOString().slice(0, 10)}`, {
+    cache: "no-store",
+    headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+  });
+}
+
 function normalizeOrigin(value: string) {
   const trimmed = value.trim().replace(/\/+$/, "");
   if (!trimmed) return "";
@@ -198,9 +205,7 @@ Deno.serve(async (req) => {
 
     if (!row) {
       // No client payload — fetch fresh from Lichess (only returns today's puzzle)
-      const lichessRes = await fetch(LICHESS_DAILY_API, {
-        headers: { Accept: "application/json" },
-      });
+      const lichessRes = await fetchLichessDaily();
 
       if (!lichessRes.ok) {
         return Response.json(
@@ -210,6 +215,28 @@ Deno.serve(async (req) => {
       }
 
       const data = (await lichessRes.json()) as LichessDaily;
+      const sourcePuzzleId = data.puzzle?.id || null;
+      const { data: duplicate } = sourcePuzzleId
+        ? await supabase
+          .from("daily_puzzles")
+          .select("date,puzzle_id")
+          .eq("source", "lichess-api")
+          .eq("source_puzzle_id", sourcePuzzleId)
+          .neq("date", targetDate)
+          .maybeSingle()
+        : { data: null };
+
+      if (duplicate) {
+        return Response.json(
+          {
+            error: "Lichess returned a puzzle already archived on another date",
+            source_puzzle_id: sourcePuzzleId,
+            existing_date: duplicate.date,
+          },
+          { status: 502, headers: corsHeaders },
+        );
+      }
+
       const initialFen = getInitialFen(data);
       const solution = data.puzzle?.solution || [];
 
@@ -226,7 +253,7 @@ Deno.serve(async (req) => {
       row = {
         date: targetDate,
         puzzle_id: `lichess_daily_${targetDate}_${data.puzzle?.id || "api"}`,
-        source_puzzle_id: data.puzzle?.id || null,
+        source_puzzle_id: sourcePuzzleId,
         title: `Daily: ${
           firstTheme ? firstTheme.replace(/([A-Z])/g, " $1") : "Tactical Shot"
         }`,

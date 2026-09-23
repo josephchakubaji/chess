@@ -776,7 +776,10 @@ function getDailyInitialFen(data) {
 
 async function fetchOnlineDailyPuzzle(todayKey) {
   try {
-    const res = await fetch(DAILY_PUZZLE_API);
+    const res = await fetch(`${DAILY_PUZZLE_API}?date=${todayKey}`, {
+      cache: "no-store",
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" }
+    });
     if (!res.ok) return;
     const data = await res.json();
     if (data && data.puzzle && data.puzzle.solution && data.game) {
@@ -826,6 +829,17 @@ async function fetchOnlineDailyPuzzle(todayKey) {
         source: "lichess-api",
         date: todayKey
       };
+      const { data: duplicate } = await supabaseClient
+        .from(DAILY_PUZZLE_TABLE)
+        .select("date")
+        .eq("source", "lichess-api")
+        .eq("source_puzzle_id", fetchedPuzzle.sourcePuzzleId)
+        .neq("date", todayKey)
+        .maybeSingle();
+      if (duplicate) {
+        console.warn("Lichess returned an already archived daily puzzle:", fetchedPuzzle.sourcePuzzleId);
+        return;
+      }
       cacheDailyPuzzle(fetchedPuzzle, todayKey);
       const viewingArchivedPuzzle = puzzleMode && currentPuzzleIndex === -1 && dailyPuzzle && dailyPuzzle.date !== todayKey;
       if (!viewingArchivedPuzzle) {

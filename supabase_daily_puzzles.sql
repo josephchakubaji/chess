@@ -16,6 +16,19 @@ create table if not exists public.daily_puzzles (
   updated_at timestamptz not null default now()
 );
 
+-- A Lichess puzzle must only be archived once.
+delete from public.daily_puzzles older
+using public.daily_puzzles newer
+where older.source = 'lichess-api'
+  and newer.source = 'lichess-api'
+  and older.source_puzzle_id is not null
+  and older.source_puzzle_id = newer.source_puzzle_id
+  and older.date < newer.date;
+
+create unique index if not exists daily_puzzles_source_puzzle_id_key
+on public.daily_puzzles (source_puzzle_id)
+where source = 'lichess-api' and source_puzzle_id is not null;
+
 create or replace function public.set_daily_puzzles_updated_at()
 returns trigger
 language plpgsql
