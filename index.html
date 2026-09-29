@@ -4039,11 +4039,18 @@
                 error: registration.error,
                 message: await getEdgeFunctionError(registration.error),
               };
+            } else if (registration.data?.confirmationRequired) {
+              setAuthMessage(
+                `Verification email sent to ${registration.data.email || email}. Check your inbox and spam folder, then sign in after verifying.`,
+              );
+              return;
             } else {
-              result = await supabaseClient.auth.signInWithPassword({
-                email,
-                password,
-              });
+              result = {
+                error: {
+                  message:
+                    "Could not start email verification. Please try again.",
+                },
+              };
             }
           } else {
             result = await supabaseClient.auth.signInWithPassword({
@@ -4083,11 +4090,7 @@
             return;
           }
 
-          setAuthMessage(
-            authRegisterMode && !result.data.session
-              ? "Check your email to confirm your account."
-              : "",
-          );
+          setAuthMessage("");
         } catch (authError) {
           setAuthMessage(
             "Authentication is temporarily unavailable. Please try again later.",

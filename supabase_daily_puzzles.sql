@@ -61,8 +61,8 @@ using (auth.role() = 'authenticated');
 -- Daily puzzle writes are server-only. Use the save-daily-puzzle edge function
 -- with its service-role key; never expose that key in browser code.
 
--- Supabase Auth owns auth.users, so email validation and plus-address rejection
--- are enforced in the client auth form rather than with an auth.users trigger.
+-- Supabase Auth owns auth.users. Signup claims canonicalize plus tags and Gmail
+-- dot aliases so alternate spellings cannot register the same inbox twice.
 
 -- Backend-owned email claims prevent plus-address aliases and signup races.
 create table if not exists public.auth_email_claims (
@@ -74,8 +74,12 @@ alter table public.auth_email_claims enable row level security;
 revoke all on public.auth_email_claims from anon, authenticated;
 
 insert into public.auth_email_claims (email)
-select distinct lower(split_part(split_part(email, '@', 1), '+', 1)
-  || '@' || split_part(email, '@', 2))
+select distinct case
+  when split_part(lower(email), '@', 2) in ('gmail.com', 'googlemail.com') then
+    replace(split_part(split_part(lower(email), '@', 1), '+', 1), '.', '') || '@gmail.com'
+  else
+    split_part(lower(email), '+', 1)
+end
 from auth.users
 where email is not null
 on conflict (email) do nothing;
