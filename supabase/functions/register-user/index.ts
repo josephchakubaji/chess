@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { cleanupExpiredUnverifiedUsers } from "../_shared/cleanup-unverified-signups.ts";
 
 const EMAIL_PATTERN = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 const EMOJI_PATTERN = /\p{Extended_Pictographic}/u;
@@ -68,6 +69,7 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+    await cleanupExpiredUnverifiedUsers(admin);
 
     const { error: claimError } = await admin
       .from("auth_email_claims")

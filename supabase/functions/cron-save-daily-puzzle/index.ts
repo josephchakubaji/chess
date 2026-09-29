@@ -4,6 +4,7 @@
  * this job never calls an external puzzle API.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { cleanupExpiredUnverifiedUsers } from "../_shared/cleanup-unverified-signups.ts";
 
 Deno.serve(async (req) => {
   if (req.method !== "GET" && req.method !== "POST") {
@@ -23,12 +24,19 @@ Deno.serve(async (req) => {
   }
 
   const date = new Date().toISOString().slice(0, 10);
-  const { data, error } = await createClient(supabaseUrl, serviceRoleKey)
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const removedUnverifiedUsers = await cleanupExpiredUnverifiedUsers(supabase);
+  const { data, error } = await supabase
     .from("daily_puzzles")
     .select("date,puzzle_id")
     .eq("date", date)
     .maybeSingle();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ date, puzzle_id: data?.puzzle_id || null, exists: Boolean(data) });
+  return Response.json({
+    date,
+    puzzle_id: data?.puzzle_id || null,
+    exists: Boolean(data),
+    removed_unverified_users: removedUnverifiedUsers,
+  });
 });

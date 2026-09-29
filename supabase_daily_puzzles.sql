@@ -78,7 +78,8 @@ select distinct case
   when split_part(lower(email), '@', 2) in ('gmail.com', 'googlemail.com') then
     replace(split_part(split_part(lower(email), '@', 1), '+', 1), '.', '') || '@gmail.com'
   else
-    split_part(lower(email), '+', 1)
+    split_part(split_part(lower(email), '@', 1), '+', 1)
+      || '@' || split_part(lower(email), '@', 2)
 end
 from auth.users
 where email is not null
@@ -410,8 +411,8 @@ with check (realtime.topic() like 'chess-%');
 -- AUTOMATED DAILY PUZZLE ARCHIVING
 -- ============================================================
 -- Requires pg_cron and pg_net extensions (enabled by default on Supabase).
--- The cron job runs at 00:05 UTC every day, checking that today's
--- `public.daily_puzzles` row exists.
+-- The cron job runs hourly, checking that today's `public.daily_puzzles` row
+-- exists and removing Auth users who have not verified email within 24 hours.
 --
 -- SETUP STEPS:
 --   1. Deploy the edge function:
@@ -438,7 +439,7 @@ where exists (
 -- Schedule the job: every day at 00:05 UTC
 select cron.schedule(
   'verify-daily-puzzle',             -- unique job name
-  '5 0 * * *',                      -- cron expression: 00:05 UTC daily
+  '5 * * * *',                      -- hourly; removes expired unverified signups promptly
   $$
   select net.http_post(
     url := 'https://yaauwnvcjjetdybeixfr.supabase.co/functions/v1/cron-save-daily-puzzle',
@@ -456,6 +457,7 @@ select cron.schedule(
   );
   $$
 );
+
 
 -- -------------------------------------------------------
 -- Optional: manual trigger to save today's puzzle now
