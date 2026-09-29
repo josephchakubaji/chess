@@ -1999,31 +1999,13 @@
       const DAILY_PUZZLE_TABLE = "daily_puzzles";
       const DAILY_FALLBACKS = [
         {
-          id: "generated_daily_rank_pin",
-          title: "Daily: Rank Pin",
-          category: "Intermediate",
-          goal: "White to move: Use the pinned back rank for mate.",
-          fen: "6k1/5ppp/8/8/8/8/6PP/4R1K1 w - - 0 1",
-          solution: ["e1e8"],
-          hint: "The rook can invade the eighth rank.",
-        },
-        {
-          id: "generated_daily_corner_net",
-          title: "Daily: Corner Net",
-          category: "Intermediate",
-          goal: "Black to move: Finish the cornered king.",
-          fen: "7k/6pp/8/8/8/8/5qPP/6K1 b - - 0 1",
-          solution: ["f2e1"],
-          hint: "Bring the queen to the first rank.",
-        },
-        {
-          id: "generated_daily_queen_lift",
-          title: "Daily: Queen Lift",
+          id: "lichess_offline_daily",
+          title: "Daily: Calculate the Full Line",
           category: "Advanced",
-          goal: "White to move: Land the queen where the king has no escape.",
-          fen: "6k1/6pp/8/8/8/8/5PPP/3Q2K1 w - - 0 1",
-          solution: ["d1d8"],
-          hint: "The open file points straight at the back rank.",
+          goal: "Black to move: Find the best line in 3 moves.",
+          fen: "2r1qrk1/pN4p1/2b1p2p/3nN3/P2P1p2/1Q6/1P3PPP/R2R2K1 b - - 0 1",
+          solution: ["c8b8", "b7d6", "b8b3", "d6e8", "c6e8"],
+          hint: "Look for forcing checks, captures, and threats. Calculate the full line.",
         },
       ];
 
@@ -2059,6 +2041,22 @@
         return (fen || "").split(" ").slice(0, 4).join(" ");
       }
 
+      function hasDailyPuzzleDepth(puzzle) {
+        let solution = puzzle?.solution;
+        if (typeof solution === "string") {
+          try {
+            solution = JSON.parse(solution);
+          } catch (_error) {
+            return false;
+          }
+        }
+        return (
+          Array.isArray(solution) &&
+          solution.length >= 4 &&
+          solution.length <= 6
+        );
+      }
+
       function isExistingPuzzleDuplicate(puzzle) {
         if (!puzzle) return true;
         const fenKey = normalizeFenForCompare(puzzle.fen);
@@ -2079,7 +2077,7 @@
             cached.date === todayKey &&
             cached.expiresAt > Date.now() &&
             cached.puzzle &&
-            cached.puzzle.source === "supabase"
+            hasDailyPuzzleDepth(cached.puzzle)
           ) {
             return cached.puzzle;
           }
@@ -2127,18 +2125,7 @@
       }
 
       function buildDailyPuzzleToSave(todayKey) {
-        const puzzle = PUZZLES[dailyHash(todayKey) % PUZZLES.length];
-        return {
-          date: todayKey,
-          puzzle_id: `daily_${todayKey}_${puzzle.id}`,
-          title: puzzle.title,
-          category: puzzle.category,
-          goal: puzzle.goal,
-          fen: puzzle.fen,
-          solution: puzzle.solution,
-          hint: puzzle.hint,
-          source: "supabase",
-        };
+        return { date: todayKey };
       }
 
       async function saveDailyPuzzleToSupabase(puzzle) {
@@ -2208,11 +2195,11 @@
             .eq("date", todayKey)
             .maybeSingle();
           if (error) throw error;
-          if (!data) {
+          if (!data || !hasDailyPuzzleDepth(rowToDailyPuzzle(data))) {
             const savedPuzzle = await saveDailyPuzzleToSupabase(
               buildDailyPuzzleToSave(todayKey),
             );
-            if (!savedPuzzle) return;
+            if (!savedPuzzle || !hasDailyPuzzleDepth(savedPuzzle)) return;
             dailyPuzzle = savedPuzzle;
             cacheDailyPuzzle(savedPuzzle, todayKey);
             dailyArchiveLoaded = false;
@@ -2255,13 +2242,19 @@
             .limit(60);
           if (error) throw error;
 
-          archivedDailyPuzzles = (data || []).map(rowToDailyPuzzle);
+          archivedDailyPuzzles = (data || [])
+            .map(rowToDailyPuzzle)
+            .filter(hasDailyPuzzleDepth);
           dailyArchiveLoaded = true;
           const todayKey = new Date().toISOString().slice(0, 10);
           const savedToday = archivedDailyPuzzles.find(
             (p) => p.date === todayKey,
           );
-          if (savedToday && dailyPuzzle?.source !== "supabase") {
+          if (
+            savedToday &&
+            hasDailyPuzzleDepth(savedToday) &&
+            dailyPuzzle?.source !== "supabase"
+          ) {
             dailyPuzzle = savedToday;
             cacheDailyPuzzle(savedToday, todayKey);
             renderDailyPuzzleBanner();

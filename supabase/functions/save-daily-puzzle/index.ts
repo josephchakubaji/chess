@@ -35,23 +35,46 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    if (!body?.date || !body?.fen || !Array.isArray(body.solution) || body.solution.length === 0) {
-      return Response.json({ error: "date, fen, and solution are required" }, { status: 400, headers: corsHeaders });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(body?.date || "")) {
+      return Response.json({ error: "A valid date is required" }, { status: 400, headers: corsHeaders });
     }
 
+    const sourceResponse = await fetch("https://lichess.org/api/puzzle/daily", {
+      headers: { Accept: "application/json" },
+    });
+    if (!sourceResponse.ok) {
+      return Response.json({ error: "Unable to fetch today's puzzle" }, { status: 502, headers: corsHeaders });
+    }
+
+    const sourceData = await sourceResponse.json();
+    const sourcePuzzle = sourceData?.puzzle;
+    const solution = sourcePuzzle?.solution;
+    if (
+      !sourcePuzzle?.id || !sourcePuzzle?.fen || !Array.isArray(solution) ||
+      solution.length < 4 || solution.length > 6 ||
+      solution.some((move) => typeof move !== "string" || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move))
+    ) {
+      return Response.json({ error: "Today's source puzzle is not a 2-3 move line" }, { status: 422, headers: corsHeaders });
+    }
+
+    const themes = Array.isArray(sourcePuzzle.themes) ? sourcePuzzle.themes : [];
+    const themeTitle = themes[0]
+      ? themes[0].replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())
+      : "Tactical Challenge";
+    const moveCount = Math.ceil(solution.length / 2);
     const row = {
       date: body.date,
-      puzzle_id: body.puzzle_id || `daily_${body.date}`,
-      source_puzzle_id: body.source_puzzle_id || null,
-      title: body.title || "Daily Tactical Shot",
-      category: body.category || "Advanced",
-      goal: body.goal || "Find the best move!",
-      fen: body.fen,
-      solution: body.solution,
-      hint: body.hint || null,
-      rating: body.rating || null,
-      themes: Array.isArray(body.themes) ? body.themes : [],
-      source: body.source || "supabase",
+      puzzle_id: `daily_${body.date}_${sourcePuzzle.id}`,
+      source_puzzle_id: sourcePuzzle.id,
+      title: `Daily: ${themeTitle}`,
+      category: "Advanced",
+      goal: `Find the best line in ${moveCount} moves.`,
+      fen: sourcePuzzle.fen,
+      solution,
+      hint: "Look for forcing checks, captures, and threats. Calculate the full line.",
+      rating: sourcePuzzle.rating || null,
+      themes,
+      source: "lichess",
     };
 
     const { data, error } = await supabase
