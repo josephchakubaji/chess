@@ -122,7 +122,7 @@ returns table (
 )
 language sql
 security definer
-set search_path = public
+set search_path = public, auth
 as $$
   select
     gh.id,
@@ -250,7 +250,7 @@ returns table (
 )
 language sql
 security definer
-set search_path = public
+set search_path = public, auth
 as $$
   select
     row_number() over (order by p.elo_rating desc, p.games_played desc, p.created_at asc) as rank,
@@ -262,6 +262,7 @@ as $$
     p.losses,
     p.draws
   from public.profiles p
+  join auth.users u on u.id = p.id and u.email_confirmed_at is not null
   order by p.elo_rating desc, p.games_played desc, p.created_at asc
   limit least(greatest(coalesce(p_limit, 100), 1), 100);
 $$;
@@ -411,8 +412,8 @@ with check (realtime.topic() like 'chess-%');
 -- AUTOMATED DAILY PUZZLE ARCHIVING
 -- ============================================================
 -- Requires pg_cron and pg_net extensions (enabled by default on Supabase).
--- The cron job runs hourly, checking that today's `public.daily_puzzles` row
--- exists and removing Auth users who have not verified email within 24 hours.
+-- The cron job runs every minute, checking that today's `public.daily_puzzles`
+-- row exists and removing Auth users who have not verified email within 30 minutes.
 --
 -- SETUP STEPS:
 --   1. Deploy the edge function:
@@ -423,7 +424,7 @@ with check (realtime.topic() like 'chess-%');
 --      while the edge function reads its environment secret):
 --        select vault.create_secret('<your-random-secret>', 'CRON_SECRET');
 --   4. Run this SQL file in the Supabase SQL Editor.
---   5. The cron job will fire automatically every day at 00:05 UTC.
+--   5. The cron job will fire automatically every minute.
 -- ============================================================
 
 -- Enable required extensions
@@ -436,10 +437,10 @@ where exists (
   select 1 from cron.job where jobname = 'verify-daily-puzzle'
 );
 
--- Schedule the job: every day at 00:05 UTC
+-- Schedule the job every minute so expired pending signups are removed promptly.
 select cron.schedule(
   'verify-daily-puzzle',             -- unique job name
-  '5 * * * *',                      -- hourly; removes expired unverified signups promptly
+  '* * * * *',                      -- every minute; enforce the 30-minute verification expiry
   $$
   select net.http_post(
     url := 'https://yaauwnvcjjetdybeixfr.supabase.co/functions/v1/cron-save-daily-puzzle',

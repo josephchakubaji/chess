@@ -1,5 +1,5 @@
 export async function cleanupExpiredUnverifiedUsers(supabase: any) {
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - 30 * 60 * 1000;
   const users = [];
   let page = 1;
 
