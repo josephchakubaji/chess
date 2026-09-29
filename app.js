@@ -699,7 +699,7 @@ async function loadArchivedDailyPuzzles(force = false) {
       .limit(60);
     if (error) throw error;
 
-    archivedDailyPuzzles = (data || []).map(rowToDailyPuzzle).filter(hasDailyPuzzleDepth);
+    archivedDailyPuzzles = (data || []).map(rowToDailyPuzzle);
     dailyArchiveLoaded = true;
     const todayKey = new Date().toISOString().slice(0, 10);
     const savedToday = archivedDailyPuzzles.find((p) => p.date === todayKey);
