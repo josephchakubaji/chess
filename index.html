@@ -1233,6 +1233,7 @@
       let modalShownForGame = false;
       let showMoveHints =
         localStorage.getItem("chess_show_move_hints") !== "false";
+      let selectedVariant = "standard";
 
       let currentPuzzleIndex = 0,
         currentPuzzleStep = 0;
@@ -3717,7 +3718,7 @@
         gameInitialFen = chess.fen();
 
         // Apply variant setup
-        if (state.variant === "chess960") {
+        if (selectedVariant === "chess960") {
           chess.load(randomChess960Fen());
           showToast("Chess960 starting position loaded.");
         }
@@ -3821,9 +3822,9 @@
               message.payload.colors[id] || (host ? "w" : "b");
             color = assignedColor;
             if (message.payload.variant) {
-              state.variant = message.payload.variant;
+              selectedVariant = message.payload.variant;
               document.querySelectorAll(".variant-select").forEach((el) => {
-                el.value = state.variant;
+                el.value = selectedVariant;
               });
             }
             enterGame(message.payload.timeControl || selectedTimeControl);
@@ -4437,7 +4438,7 @@
               payload: {
                 colors,
                 timeControl: selectedTimeControl,
-                variant: state.variant || "standard",
+                variant: selectedVariant || "standard",
               },
             });
           } catch (e) {
@@ -4505,7 +4506,7 @@
           startLocal(selectedTimeControl);
         }
 
-        if (state.variant === "chess960") {
+        if (selectedVariant === "chess960") {
           startSelectedVariant();
         }
       };
@@ -4686,6 +4687,7 @@
           ...defaultState,
           ...JSON.parse(localStorage.getItem(ENHANCEMENT_STATE_KEY) || "{}"),
         };
+        selectedVariant = state.variant;
         let stats = {
           aiWins: 0,
           aiLosses: 0,
@@ -4857,6 +4859,7 @@
         }
 
         function applySettings() {
+          state.variant = selectedVariant;
           document.body.dataset.boardTheme = state.boardTheme;
           document.body.dataset.pieceTheme = state.pieceTheme;
           document.body.classList.toggle("hide-last-move", !state.lastMove);
@@ -5226,6 +5229,7 @@
           document.querySelectorAll(".variant-select").forEach((el) => {
             el.onchange = () => {
               state.variant = el.value;
+              selectedVariant = el.value;
               saveState();
               applySettings();
             };
