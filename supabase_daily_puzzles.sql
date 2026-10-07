@@ -140,7 +140,10 @@ execute function public.validate_game_history_authoritative_update();
 
 -- get_active_game: returns the user's most recent in-progress private game (if any).
 -- Used by the client to show a "Rejoin game" banner on the home screen.
-create or replace function public.get_active_game()
+-- Some environments may already have an older version of this function with a
+-- different return shape, so we must drop it before recreating it.
+drop function if exists public.get_active_game();
+create function public.get_active_game()
 returns table (
   id uuid,
   room_code text,

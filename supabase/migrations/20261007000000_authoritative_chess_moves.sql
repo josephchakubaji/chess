@@ -26,7 +26,8 @@ before update on public.game_history
 for each row
 execute function public.validate_game_history_authoritative_update();
 
-create or replace function public.get_active_game()
+drop function if exists public.get_active_game();
+create function public.get_active_game()
 returns table (
   id uuid,
   room_code text,
