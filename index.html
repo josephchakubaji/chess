@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chess Room</title>
-    <!-- Loading chess.js for move validation and game logic -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <!-- Load the chess engine locally so the game logic is not mutable from a public CDN. -->
+    <script src="vendor/chess.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="styles.css?v=500" />
   </head>
@@ -1398,6 +1398,7 @@
           opponent: opponent || "Unknown opponent",
           time_control: timeControl || "unlimited",
           status: "in_progress",
+          current_fen: chess.fen(),
         };
         if (roomCode) insertPayload.room_code = roomCode;
         if (chess && typeof chess.pgn === "function")
@@ -1420,18 +1421,37 @@
         activeGameMode = mode; // remember the mode so Elo is only updated for rated games
       }
 
-      async function syncGamePgn() {
-        if (!activeGameHistoryId || !currentUser) return;
-        try {
-          const currentPgn = typeof chess.pgn === "function" ? chess.pgn() : "";
-          await supabaseClient
-            .from("game_history")
-            .update({ pgn: currentPgn })
-            .eq("id", activeGameHistoryId)
-            .eq("user_id", currentUser.id);
-        } catch (err) {
-          console.warn("syncGamePgn failed:", err);
+      async function submitMoveToServer(move, fenBefore) {
+        if (!activeGameHistoryId || !currentRoomCode || !currentUser) {
+          throw new Error("No active private game.");
         }
+        const { data: sessionData } = await supabaseClient.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error("Authentication required.");
+
+        const response = await fetch(`${SUPABASE_URL}/functions/submit-move`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            apikey: SUPABASE_KEY,
+          },
+          body: JSON.stringify({
+            game_id: activeGameHistoryId,
+            room_code: currentRoomCode,
+            fen_before: fenBefore,
+            from: move.from,
+            to: move.to,
+            promotion: move.promotion || undefined,
+          }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.ok) {
+          throw new Error(
+            result.error || "The move was rejected by the server.",
+          );
+        }
+        return result;
       }
 
       async function checkActiveGame() {
@@ -2962,6 +2982,7 @@
           }
 
           const promotion = await getPromotionChoice(selected, square);
+          const fenBefore = chess.fen();
           const move = chess.move({ from: selected, to: square, promotion });
 
           if (move) {
@@ -3090,18 +3111,34 @@
             moveHistory.push(chess.history().slice(-1)[0]);
 
             if (privateRoom) {
-              await channel.send({
-                type: "broadcast",
-                event: "move",
-                payload: {
-                  fen: chess.fen(),
-                  from: move.from,
-                  to: move.to,
-                  history: moveHistory,
-                  clockMs,
-                },
-              });
-              void syncGamePgn();
+              try {
+                const serverMove = await submitMoveToServer(move, fenBefore);
+                chess.load(serverMove.fen);
+                lastMove = { from: serverMove.from, to: serverMove.to };
+                moveHistory = chess.history();
+                await channel.send({
+                  type: "broadcast",
+                  event: "move",
+                  payload: {
+                    fen: serverMove.fen,
+                    from: serverMove.from,
+                    to: serverMove.to,
+                    history: moveHistory,
+                    clockMs,
+                    validatedByServer: true,
+                  },
+                });
+              } catch (serverMoveError) {
+                chess.undo();
+                moveHistory = moveHistory.slice(0, -1);
+                lastMove = null;
+                selected = null;
+                showToast(
+                  serverMoveError.message || "Move rejected by the server.",
+                );
+                draw();
+                return;
+              }
             }
 
             draw();
@@ -3839,7 +3876,6 @@
               clockMs = { ...message.payload.clockMs };
             draw();
             if (timedMode) startClock();
-            void syncGamePgn();
           })
           .on("broadcast", { event: "undo-request" }, function (message) {
             if (message.payload.requesterId === id) return;
@@ -3859,7 +3895,6 @@
                   clockMs = { ...message.payload.clockMs };
                 draw();
                 if (timedMode && !chess.game_over()) startClock();
-                void syncGamePgn();
               }
               showToast("Undo request was accepted! ⟲");
             } else {
@@ -4525,18 +4560,13 @@
             return;
           }
           const targetRoom = resumableGame.room_code;
-          const targetPgn = resumableGame.pgn;
+          const targetFen = resumableGame.current_fen;
           const targetTc = resumableGame.time_control || "unlimited";
           showToast(`Rejoining room ${targetRoom}...`);
           await joinPrivate(targetRoom, false);
-          if (targetPgn) {
-            try {
-              chess.load_pgn(targetPgn, { sloppy: true });
-              moveHistory = chess.history();
-              draw();
-            } catch (pgnErr) {
-              console.warn("Could not restore PGN:", pgnErr);
-            }
+          if (targetFen && chess.load(targetFen)) {
+            moveHistory = chess.history();
+            draw();
           }
           if (rejoinBanner) rejoinBanner.classList.add("hidden");
         };
@@ -4598,7 +4628,6 @@
             clockMs = targetClocks;
             draw();
             if (timedMode && !chess.game_over()) startClock();
-            void syncGamePgn();
           }
 
           try {

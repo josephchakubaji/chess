@@ -110,6 +110,34 @@ add column if not exists room_code text;
 alter table public.game_history
 add column if not exists pgn text;
 
+alter table public.game_history
+add column if not exists current_fen text
+not null default 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+create or replace function public.validate_game_history_authoritative_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if current_user <> 'supabase_service_role'
+     and (
+       new.current_fen is distinct from old.current_fen
+       or new.pgn is distinct from old.pgn
+     ) then
+    raise exception 'Move state can only be updated by the server';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists game_history_authoritative_update on public.game_history;
+create trigger game_history_authoritative_update
+before update on public.game_history
+for each row
+execute function public.validate_game_history_authoritative_update();
+
 -- get_active_game: returns the user's most recent in-progress private game (if any).
 -- Used by the client to show a "Rejoin game" banner on the home screen.
 create or replace function public.get_active_game()
@@ -118,7 +146,8 @@ returns table (
   room_code text,
   pgn text,
   time_control text,
-  created_at timestamptz
+  created_at timestamptz,
+  current_fen text
 )
 language sql
 security definer
@@ -129,7 +158,8 @@ as $$
     gh.room_code,
     gh.pgn,
     gh.time_control,
-    gh.created_at
+    gh.created_at,
+    gh.current_fen
   from public.game_history gh
   where gh.user_id = auth.uid()
     and gh.mode = 'private'
@@ -142,7 +172,8 @@ $$;
 revoke all on function public.get_active_game() from public;
 grant execute on function public.get_active_game() to authenticated;
 
--- update_game_pgn: called after each move in a private game to keep pgn column current.
+-- Server-authoritative move state: the edge function is the only writer of
+-- current_fen and the corresponding PGN snapshot.
 create or replace function public.update_game_pgn(p_game_id uuid, p_pgn text)
 returns void
 language plpgsql
@@ -150,9 +181,18 @@ security definer
 set search_path = public
 as $$
 begin
+  if current_user <> 'supabase_service_role' then
+    if not exists (
+      select 1 from public.game_history
+      where id = p_game_id and user_id = auth.uid()
+    ) then
+      raise exception 'Game not found';
+    end if;
+  end if;
   update public.game_history
   set pgn = p_pgn
-  where id = p_game_id and user_id = auth.uid();
+  where id = p_game_id
+    and (current_user = 'supabase_service_role' or user_id = auth.uid());
 end;
 $$;
 

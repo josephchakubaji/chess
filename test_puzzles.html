@@ -1,90 +1,278 @@
 <!doctype html>
 <html>
-<head>
-  <title>Chess 24 Puzzles Diagnostic</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-  <style>
-    body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #444; padding: 8px 12px; text-align: left; font-size: 13px; }
-    th { background: #16213e; }
-    .ok { color: #4ade80; font-weight: bold; }
-    .fail { color: #f87171; font-weight: bold; }
-    .badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; }
-    .beginner { background: #1e3a5f; color: #93c5fd; }
-    .intermediate { background: #4a2c11; color: #fed7aa; }
-    .advanced { background: #451a1a; color: #fca5a5; }
-    h2 { color: #818cf8; }
-  </style>
-</head>
-<body>
-<h2>Chess 24 Puzzles Validator — chess.js v0.10.3</h2>
-<table id="out">
-  <tr>
-    <th>#</th><th>Category</th><th>Title</th><th>load()</th><th>game_over at start?</th><th>Steps Tested</th><th>VERDICT</th>
-  </tr>
-</table>
-<script>
-const PUZZLES = [
-  // ==================== BEGINNER ====================
-  { id:"puzzle_1", title:"Back-Rank Checkmate", category:"Beginner", fen:"6k1/5ppp/8/8/8/8/5PPP/1R4K1 w - - 0 1", solution:["b1b8"] },
-  { id:"puzzle_2", title:"Scholar's Touch", category:"Beginner", fen:"r1bqkb1r/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 0 1", solution:["f3f7"] },
-  { id:"puzzle_3", title:"Smothered Knight Mate", category:"Beginner", fen:"6nk/6pp/8/4N3/8/8/5PPP/6K1 w - - 0 1", solution:["e5f7"] },
-  { id:"puzzle_4", title:"Rook Back-Rank Exchange", category:"Beginner", fen:"3r2k1/1p3ppp/8/8/8/8/1Q3PPP/3R2K1 w - - 0 1", solution:["d1d8"] },
-  { id:"puzzle_5", title:"Corridor Checkmate", category:"Beginner", fen:"2r3k1/5ppp/8/8/8/8/5PPP/2R3K1 w - - 0 1", solution:["c1c8"] },
-  { id:"puzzle_6", title:"Arabian Rook Mate", category:"Beginner", fen:"7k/5Rpp/8/8/8/8/6PP/6K1 w - - 0 1", solution:["f7f8"] },
-  { id:"puzzle_7", title:"Queen & Helper Battery", category:"Beginner", fen:"r1bq1rk1/pppp1ppp/2n5/4p1N1/2B1P3/3P4/PPP2PPP/R2QK2R w KQ - 0 1", solution:["d1h5"] },
-  { id:"puzzle_8", title:"Anastasia's Mate Concept", category:"Beginner", fen:"4r1k1/5ppp/8/8/8/8/5PPP/4Q1K1 w - - 0 1", solution:["e1e8"] },
-
-  // ==================== INTERMEDIATE ====================
-  { id:"puzzle_9", title:"Royal Knight Fork", category:"Intermediate", fen:"r3k2r/ppp2p1p/8/3q4/4N3/8/PPPP1PPP/R3K2R w KQkq - 0 1", solution:["e4f6"] },
-  { id:"puzzle_10", title:"Bishop Pin Tactics", category:"Intermediate", fen:"r1b1k2r/pppp1ppp/8/4n3/4Pq2/2P5/PPP2PPP/R1BQK2R w KQkq - 0 1", solution:["c1f4"] },
-  { id:"puzzle_11", title:"Queen & Knight Mate", category:"Intermediate", fen:"r4rk1/pp3ppp/3bpn2/8/8/2N2N2/PPP2PPP/3QR1K1 w - - 0 1", solution:["d1d6"] },
-  { id:"puzzle_12", title:"Corner Trap Checkmate", category:"Intermediate", fen:"6k1/5ppp/8/7Q/2B5/8/5PPP/6K1 w - - 0 1", solution:["h5f7"] },
-  { id:"puzzle_13", title:"Two Rooks Staircase", category:"Intermediate", fen:"8/8/8/8/8/r5k1/8/R6K w - - 0 1", solution:["a1a3"] },
-  { id:"puzzle_14", title:"Skewer on the Diagonal", category:"Intermediate", fen:"q3k3/2p2ppp/8/1N6/8/8/5PPP/4K3 w - - 0 1", solution:["b5c7"] },
-  { id:"puzzle_15", title:"Discovery on the File", category:"Intermediate", fen:"r1b1k2r/pppp1ppp/8/8/1b1q4/2N5/PPP2PPP/R1BQR1K1 w kq - 0 1", solution:["d1d4"] },
-  { id:"puzzle_16", title:"Greek Gift Follow-Through", category:"Intermediate", fen:"r1bq1rk1/pppp1ppp/2n5/4P3/1bB1n3/2N2N2/PPP2PPP/R1BQK2R w KQ - 0 1", solution:["d1d5"] },
-
-  // ==================== ADVANCED ====================
-  { id:"puzzle_17", title:"Boden's Mate (Criss-Cross)", category:"Advanced", fen:"6k1/5Np1/8/8/2B5/8/6P1/6KR w - - 0 1", solution:["h1h8"] },
-  { id:"puzzle_18", title:"Rook Roller Finale", category:"Advanced", fen:"4r1k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1", solution:["e1e8"] },
-  { id:"puzzle_19", title:"Damiano's Bishop Net", category:"Advanced", fen:"r1b1k2r/pp3ppp/2n1p3/2b5/4q3/2P2N2/PP2BPPP/R1BQK2R w KQkq - 0 1", solution:["e1g1"] },
-  { id:"puzzle_20", title:"Morphy's Opera Mate", category:"Advanced", fen:"4kb1r/p2n1ppp/4p3/8/3P4/8/PPP2PPP/R1B1K1NR w KQk - 0 1", solution:["c1f4"] },
-  { id:"puzzle_21", title:"Rook Back-Rank Decoy Strike", category:"Advanced", fen:"3r2k1/5ppp/8/8/8/8/1Q3PPP/3R2K1 w - - 0 1", solution:["d1d8"] },
-  { id:"puzzle_22", title:"Pawn Promotion Breakthrough", category:"Advanced", fen:"8/4P3/8/8/8/8/pk6/R3K3 w - - 0 1", solution:["e7e8"] },
-  { id:"puzzle_23", title:"Blackburne's Mate", category:"Advanced", fen:"6k1/5ppp/8/8/8/8/4QPPP/6K1 w - - 0 1", solution:["e2e8"] },
-  { id:"puzzle_24", title:"Grandmaster Endgame Trap", category:"Advanced", fen:"1r4k1/5ppp/8/8/8/8/5PPP/1R4K1 w - - 0 1", solution:["b1b8"] }
-];
-
-const tbody = document.getElementById("out");
-PUZZLES.forEach((p, i) => {
-  const c = new Chess();
-  const loaded = c.load(p.fen);
-  const goAfterLoad = c.game_over();
-  
-  let allStepsValid = true;
-  let stepDetails = [];
-  if (loaded && !goAfterLoad) {
-    for (let step of p.solution) {
-      const from = step.slice(0, 2), to = step.slice(2, 4);
-      const m = c.move({ from, to, promotion: "q" });
-      if (!m) {
-        allStepsValid = false;
-        stepDetails.push(step + " (ILLEGAL)");
-        break;
-      } else {
-        stepDetails.push(m.san);
+  <head>
+    <title>Chess 24 Puzzles Diagnostic</title>
+    <script src="vendor/chess.min.js"></script>
+    <style>
+      body {
+        font-family: monospace;
+        padding: 20px;
+        background: #1a1a2e;
+        color: #eee;
       }
-    }
-  } else {
-    allStepsValid = false;
-  }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        border: 1px solid #444;
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 13px;
+      }
+      th {
+        background: #16213e;
+      }
+      .ok {
+        color: #4ade80;
+        font-weight: bold;
+      }
+      .fail {
+        color: #f87171;
+        font-weight: bold;
+      }
+      .badge {
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+      }
+      .beginner {
+        background: #1e3a5f;
+        color: #93c5fd;
+      }
+      .intermediate {
+        background: #4a2c11;
+        color: #fed7aa;
+      }
+      .advanced {
+        background: #451a1a;
+        color: #fca5a5;
+      }
+      h2 {
+        color: #818cf8;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Chess 24 Puzzles Validator — chess.js v0.10.3</h2>
+    <table id="out">
+      <tr>
+        <th>#</th>
+        <th>Category</th>
+        <th>Title</th>
+        <th>load()</th>
+        <th>game_over at start?</th>
+        <th>Steps Tested</th>
+        <th>VERDICT</th>
+      </tr>
+    </table>
+    <script>
+      const PUZZLES = [
+        // ==================== BEGINNER ====================
+        {
+          id: "puzzle_1",
+          title: "Back-Rank Checkmate",
+          category: "Beginner",
+          fen: "6k1/5ppp/8/8/8/8/5PPP/1R4K1 w - - 0 1",
+          solution: ["b1b8"],
+        },
+        {
+          id: "puzzle_2",
+          title: "Scholar's Touch",
+          category: "Beginner",
+          fen: "r1bqkb1r/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 0 1",
+          solution: ["f3f7"],
+        },
+        {
+          id: "puzzle_3",
+          title: "Smothered Knight Mate",
+          category: "Beginner",
+          fen: "6nk/6pp/8/4N3/8/8/5PPP/6K1 w - - 0 1",
+          solution: ["e5f7"],
+        },
+        {
+          id: "puzzle_4",
+          title: "Rook Back-Rank Exchange",
+          category: "Beginner",
+          fen: "3r2k1/1p3ppp/8/8/8/8/1Q3PPP/3R2K1 w - - 0 1",
+          solution: ["d1d8"],
+        },
+        {
+          id: "puzzle_5",
+          title: "Corridor Checkmate",
+          category: "Beginner",
+          fen: "2r3k1/5ppp/8/8/8/8/5PPP/2R3K1 w - - 0 1",
+          solution: ["c1c8"],
+        },
+        {
+          id: "puzzle_6",
+          title: "Arabian Rook Mate",
+          category: "Beginner",
+          fen: "7k/5Rpp/8/8/8/8/6PP/6K1 w - - 0 1",
+          solution: ["f7f8"],
+        },
+        {
+          id: "puzzle_7",
+          title: "Queen & Helper Battery",
+          category: "Beginner",
+          fen: "r1bq1rk1/pppp1ppp/2n5/4p1N1/2B1P3/3P4/PPP2PPP/R2QK2R w KQ - 0 1",
+          solution: ["d1h5"],
+        },
+        {
+          id: "puzzle_8",
+          title: "Anastasia's Mate Concept",
+          category: "Beginner",
+          fen: "4r1k1/5ppp/8/8/8/8/5PPP/4Q1K1 w - - 0 1",
+          solution: ["e1e8"],
+        },
 
-  const ok = loaded && !goAfterLoad && allStepsValid;
-  const badgeClass = p.category.toLowerCase();
-  tbody.innerHTML += `<tr>
-    <td>${i+1}</td>
+        // ==================== INTERMEDIATE ====================
+        {
+          id: "puzzle_9",
+          title: "Royal Knight Fork",
+          category: "Intermediate",
+          fen: "r3k2r/ppp2p1p/8/3q4/4N3/8/PPPP1PPP/R3K2R w KQkq - 0 1",
+          solution: ["e4f6"],
+        },
+        {
+          id: "puzzle_10",
+          title: "Bishop Pin Tactics",
+          category: "Intermediate",
+          fen: "r1b1k2r/pppp1ppp/8/4n3/4Pq2/2P5/PPP2PPP/R1BQK2R w KQkq - 0 1",
+          solution: ["c1f4"],
+        },
+        {
+          id: "puzzle_11",
+          title: "Queen & Knight Mate",
+          category: "Intermediate",
+          fen: "r4rk1/pp3ppp/3bpn2/8/8/2N2N2/PPP2PPP/3QR1K1 w - - 0 1",
+          solution: ["d1d6"],
+        },
+        {
+          id: "puzzle_12",
+          title: "Corner Trap Checkmate",
+          category: "Intermediate",
+          fen: "6k1/5ppp/8/7Q/2B5/8/5PPP/6K1 w - - 0 1",
+          solution: ["h5f7"],
+        },
+        {
+          id: "puzzle_13",
+          title: "Two Rooks Staircase",
+          category: "Intermediate",
+          fen: "8/8/8/8/8/r5k1/8/R6K w - - 0 1",
+          solution: ["a1a3"],
+        },
+        {
+          id: "puzzle_14",
+          title: "Skewer on the Diagonal",
+          category: "Intermediate",
+          fen: "q3k3/2p2ppp/8/1N6/8/8/5PPP/4K3 w - - 0 1",
+          solution: ["b5c7"],
+        },
+        {
+          id: "puzzle_15",
+          title: "Discovery on the File",
+          category: "Intermediate",
+          fen: "r1b1k2r/pppp1ppp/8/8/1b1q4/2N5/PPP2PPP/R1BQR1K1 w kq - 0 1",
+          solution: ["d1d4"],
+        },
+        {
+          id: "puzzle_16",
+          title: "Greek Gift Follow-Through",
+          category: "Intermediate",
+          fen: "r1bq1rk1/pppp1ppp/2n5/4P3/1bB1n3/2N2N2/PPP2PPP/R1BQK2R w KQ - 0 1",
+          solution: ["d1d5"],
+        },
+
+        // ==================== ADVANCED ====================
+        {
+          id: "puzzle_17",
+          title: "Boden's Mate (Criss-Cross)",
+          category: "Advanced",
+          fen: "6k1/5Np1/8/8/2B5/8/6P1/6KR w - - 0 1",
+          solution: ["h1h8"],
+        },
+        {
+          id: "puzzle_18",
+          title: "Rook Roller Finale",
+          category: "Advanced",
+          fen: "4r1k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1",
+          solution: ["e1e8"],
+        },
+        {
+          id: "puzzle_19",
+          title: "Damiano's Bishop Net",
+          category: "Advanced",
+          fen: "r1b1k2r/pp3ppp/2n1p3/2b5/4q3/2P2N2/PP2BPPP/R1BQK2R w KQkq - 0 1",
+          solution: ["e1g1"],
+        },
+        {
+          id: "puzzle_20",
+          title: "Morphy's Opera Mate",
+          category: "Advanced",
+          fen: "4kb1r/p2n1ppp/4p3/8/3P4/8/PPP2PPP/R1B1K1NR w KQk - 0 1",
+          solution: ["c1f4"],
+        },
+        {
+          id: "puzzle_21",
+          title: "Rook Back-Rank Decoy Strike",
+          category: "Advanced",
+          fen: "3r2k1/5ppp/8/8/8/8/1Q3PPP/3R2K1 w - - 0 1",
+          solution: ["d1d8"],
+        },
+        {
+          id: "puzzle_22",
+          title: "Pawn Promotion Breakthrough",
+          category: "Advanced",
+          fen: "8/4P3/8/8/8/8/pk6/R3K3 w - - 0 1",
+          solution: ["e7e8"],
+        },
+        {
+          id: "puzzle_23",
+          title: "Blackburne's Mate",
+          category: "Advanced",
+          fen: "6k1/5ppp/8/8/8/8/4QPPP/6K1 w - - 0 1",
+          solution: ["e2e8"],
+        },
+        {
+          id: "puzzle_24",
+          title: "Grandmaster Endgame Trap",
+          category: "Advanced",
+          fen: "1r4k1/5ppp/8/8/8/8/5PPP/1R4K1 w - - 0 1",
+          solution: ["b1b8"],
+        },
+      ];
+
+      const tbody = document.getElementById("out");
+      PUZZLES.forEach((p, i) => {
+        const c = new Chess();
+        const loaded = c.load(p.fen);
+        const goAfterLoad = c.game_over();
+
+        let allStepsValid = true;
+        let stepDetails = [];
+        if (loaded && !goAfterLoad) {
+          for (let step of p.solution) {
+            const from = step.slice(0, 2),
+              to = step.slice(2, 4);
+            const m = c.move({ from, to, promotion: "q" });
+            if (!m) {
+              allStepsValid = false;
+              stepDetails.push(step + " (ILLEGAL)");
+              break;
+            } else {
+              stepDetails.push(m.san);
+            }
+          }
+        } else {
+          allStepsValid = false;
+        }
+
+        const ok = loaded && !goAfterLoad && allStepsValid;
+        const badgeClass = p.category.toLowerCase();
+        tbody.innerHTML += `<tr>
+    <td>${i + 1}</td>
     <td><span class="badge ${badgeClass}">${p.category}</span></td>
     <td>${p.title}</td>
     <td>${loaded ? '<span class="ok">true</span>' : '<span class="fail">false</span>'}</td>
@@ -92,7 +280,7 @@ PUZZLES.forEach((p, i) => {
     <td>${stepDetails.join(" → ")}</td>
     <td>${ok ? '<span class="ok">PASS</span>' : '<span class="fail">FAIL</span>'}</td>
   </tr>`;
-});
-</script>
-</body>
+      });
+    </script>
+  </body>
 </html>
