@@ -95,7 +95,9 @@ create table if not exists public.game_history (
   result text,
   elo_processed boolean not null default false,
   created_at timestamptz not null default now(),
-  finished_at timestamptz
+  finished_at timestamptz,
+  clock_ms jsonb,
+  last_move_at timestamptz not null default now()
 );
 
 alter table public.game_history
@@ -114,17 +116,27 @@ alter table public.game_history
 add column if not exists current_fen text
 not null default 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
+alter table public.game_history
+add column if not exists player_color text check (player_color in ('w', 'b'));
+
+alter table public.game_history
+add column if not exists clock_ms jsonb;
+
+alter table public.game_history
+add column if not exists last_move_at timestamptz not null default now();
+
 create or replace function public.validate_game_history_authoritative_update()
 returns trigger
 language plpgsql
-security definer
 set search_path = public
 as $$
 begin
-  if current_user <> 'supabase_service_role'
+  if coalesce(auth.role(), '') <> 'service_role'
      and (
        new.current_fen is distinct from old.current_fen
        or new.pgn is distinct from old.pgn
+       or new.clock_ms is distinct from old.clock_ms
+       or new.last_move_at is distinct from old.last_move_at
      ) then
     raise exception 'Move state can only be updated by the server';
   end if;
@@ -150,7 +162,10 @@ returns table (
   pgn text,
   time_control text,
   created_at timestamptz,
-  current_fen text
+  current_fen text,
+  player_color text,
+  clock_ms jsonb,
+  last_move_at timestamptz
 )
 language sql
 security definer
@@ -162,7 +177,10 @@ as $$
     gh.pgn,
     gh.time_control,
     gh.created_at,
-    gh.current_fen
+    gh.current_fen,
+    gh.player_color,
+    gh.clock_ms,
+    gh.last_move_at
   from public.game_history gh
   where gh.user_id = auth.uid()
     and gh.mode = 'private'
@@ -176,7 +194,7 @@ revoke all on function public.get_active_game() from public;
 grant execute on function public.get_active_game() to authenticated;
 
 -- Server-authoritative move state: the edge function is the only writer of
--- current_fen and the corresponding PGN snapshot.
+-- current_fen, PGN, and timed-game snapshots.
 create or replace function public.update_game_pgn(p_game_id uuid, p_pgn text)
 returns void
 language plpgsql

@@ -29,9 +29,17 @@ Deno.serve(async (req) => {
     const from = body?.from;
     const to = body?.to;
     const promotion = body?.promotion || undefined;
+    const clockMs = body?.clock_ms;
 
     if (!gameId || !roomCode || typeof fenBefore !== "string" || !from || !to) {
       return Response.json({ error: "Invalid move request" }, { status: 400, headers: corsHeaders });
+    }
+    if (
+      clockMs !== undefined &&
+      (!clockMs || !Number.isFinite(clockMs.w) || clockMs.w < 0 ||
+        !Number.isFinite(clockMs.b) || clockMs.b < 0)
+    ) {
+      return Response.json({ error: "Invalid clock state" }, { status: 400, headers: corsHeaders });
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -64,14 +72,26 @@ Deno.serve(async (req) => {
 
     const nextFen = position.fen();
     const nextPgn = position.pgn();
-    const { error: updateError } = await supabase
+    const snapshot = {
+      current_fen: nextFen,
+      pgn: nextPgn,
+      last_move_at: new Date().toISOString(),
+      ...(clockMs ? { clock_ms: clockMs } : {}),
+    };
+    const { data: updatedRows, error: updateError } = await supabase
       .from("game_history")
-      .update({ current_fen: nextFen, pgn: nextPgn })
-      .eq("id", gameId)
-      .eq("user_id", userData.user.id);
+      .update(snapshot)
+      .eq("room_code", roomCode)
+      .eq("mode", "private")
+      .eq("status", "in_progress")
+      .eq("current_fen", fenBefore)
+      .select("id");
 
     if (updateError) {
       return Response.json({ error: updateError.message }, { status: 500, headers: corsHeaders });
+    }
+    if (!updatedRows?.some((row) => row.id === gameId)) {
+      return Response.json({ error: "The board position is out of date" }, { status: 409, headers: corsHeaders });
     }
 
     return Response.json({

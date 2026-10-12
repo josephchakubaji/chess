@@ -1,12 +1,11 @@
 /**
  * rejoin-game edge function
  *
- * GET  → returns the caller's active in-progress private game (room code + pgn)
+ * GET  → returns the caller's active in-progress private game snapshot
  * POST → updates the pgn snapshot for a game the caller owns
  *
- * The client calls GET on the home screen to detect a resumable game and show
- * the "Rejoin" banner.  After every move in a private game the client calls POST
- * to keep the server-side PGN current so the opponent can also restore the board.
+ * The home screen reads the same active-game record through get_active_game.
+ * The submit-move function keeps both players' board snapshots current.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -59,7 +58,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET") {
     const { data, error } = await supabase
       .from("game_history")
-      .select("id, room_code, pgn, time_control, created_at, current_fen")
+      .select("id, room_code, pgn, time_control, created_at, current_fen, player_color, clock_ms, last_move_at")
       .eq("user_id", userId)
       .eq("mode", "private")
       .eq("status", "in_progress")
