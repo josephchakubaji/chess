@@ -1308,6 +1308,9 @@
       let activeGameMode = null; // 'private' | 'computer' | 'pass_and_play' — only 'private' is rated
       let pendingGameHistory = null;
       let resumableGame = null; // stored game from get_active_game()
+      let privateGameRejoinPoll = null;
+      let waitingPrivateGame = null;
+      let privateGameRejoinReady = false;
       let undoRequestedByMe = false;
 
       function getRatingLevel(rating) {
@@ -1430,6 +1433,26 @@
         return Boolean(activeGameHistoryId);
       }
 
+      function startGameHistoryRecord(mode, opponent, timeControl, roomCode = null) {
+        const previousStart = pendingGameHistory;
+        const startRequest = (async () => {
+          if (previousStart) await previousStart;
+          return beginGameHistory(mode, opponent, timeControl, roomCode);
+        })();
+        pendingGameHistory = startRequest;
+        void startRequest.then(
+          () => {
+            if (pendingGameHistory === startRequest)
+              pendingGameHistory = null;
+          },
+          (error) => {
+            console.error("Could not start game history record:", error);
+            if (pendingGameHistory === startRequest)
+              pendingGameHistory = null;
+          },
+        );
+      }
+
       async function submitMoveToServer(move, fenBefore) {
         if (!activeGameHistoryId && pendingGameHistory) {
           await pendingGameHistory;
@@ -1465,6 +1488,133 @@
           );
         }
         return result;
+      }
+
+      async function updatePrivateGameRejoin(action, roomCode, disconnectedUserId = null) {
+        const { data, error } = await supabaseClient.functions.invoke(
+          "rejoin-game",
+          {
+            body: {
+              action,
+              room_code: roomCode,
+              disconnected_user_id: disconnectedUserId,
+            },
+          },
+        );
+        if (error) throw error;
+        return data;
+      }
+
+      function stopPrivateGameRejoinPoll() {
+        if (privateGameRejoinPoll) {
+          clearInterval(privateGameRejoinPoll);
+          privateGameRejoinPoll = null;
+        }
+      }
+
+      async function finishPrivateGameRejoin(snapshot) {
+        if (privateGameRejoinReady || !snapshot?.current_fen) return;
+        privateGameRejoinReady = true;
+        stopPrivateGameRejoinPoll();
+
+        const savedGame = waitingPrivateGame;
+        waitingPrivateGame = null;
+        if (savedGame) {
+          enterGame(savedGame.time_control || "unlimited", {
+            ...savedGame,
+            pgn: snapshot.pgn || savedGame.pgn,
+            current_fen: snapshot.current_fen,
+            clock_ms: snapshot.clock_ms || savedGame.clock_ms,
+            last_move_at: snapshot.last_move_at || savedGame.last_move_at,
+          });
+        } else {
+          restorePrivateGamePosition(snapshot);
+          restorePrivateGameClock(snapshot);
+          draw();
+          resumePrivateGameStatus();
+        }
+
+        if (rejoinBanner) rejoinBanner.classList.add("hidden");
+        resumableGame = null;
+        if (channel) {
+          const { error } = await channel.send({
+            type: "broadcast",
+            event: "rejoin-ready",
+            payload: {
+              senderId: id,
+              pgn: chess.pgn(),
+              currentFen: chess.fen(),
+              clockMs: { ...clockMs },
+              lastMoveAt: new Date().toISOString(),
+            },
+          });
+          if (error) console.warn("Could not notify the opponent about rejoining:", error);
+        }
+        showToast("Both players are back. The game has resumed.");
+      }
+
+      async function getPrivateGameSnapshot(roomCode) {
+        const { data, error } = await supabaseClient
+          .from("game_history")
+          .select("id,pgn,current_fen,player_color,time_control,clock_ms,last_move_at")
+          .eq("room_code", roomCode)
+          .eq("user_id", currentUser.id)
+          .eq("mode", "private")
+          .eq("status", "in_progress")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error("The saved game is no longer active.");
+        return data;
+      }
+
+      async function checkPrivateGameRejoin(roomCode) {
+        try {
+          const state = await updatePrivateGameRejoin("status", roomCode);
+          if (state?.state === "ready" && waitingPrivateGame) {
+            const snapshot = await getPrivateGameSnapshot(roomCode);
+            await finishPrivateGameRejoin(snapshot);
+          } else if (state?.state === "finished") {
+            stopPrivateGameRejoinPoll();
+            const gameId =
+              waitingPrivateGame?.id || resumableGame?.id || activeGameHistoryId;
+            waitingPrivateGame = null;
+            if (rejoinBanner) rejoinBanner.classList.add("hidden");
+            resumableGame = null;
+            activeGameHistoryId = null;
+            activeGameMode = null;
+            if (state.result && gameId) {
+              const { error } = await supabaseClient.rpc("record_elo_result", {
+                p_game_id: gameId,
+                p_result: state.result,
+              });
+              if (error) console.warn("Could not record the forfeit rating:", error.message);
+            }
+            const message = state.result === "win"
+              ? "Your opponent did not return within 5 minutes. You win."
+              : "You did not return within 5 minutes. The game is recorded as a loss.";
+            showToast(message);
+            if (privateRoom) await leavePrivate(false);
+          } else if (state?.state === "waiting" && state.deadline && rejoinMeta) {
+            const remaining = Math.max(0, Date.parse(state.deadline) - Date.now());
+            const countdown = Math.ceil(remaining / 1000);
+            rejoinMeta.textContent =
+              `Waiting for both players to return · ${countdown}s`;
+            if (waitingPrivateGame)
+              lobbyPlayers.textContent =
+                `Waiting for both players to return. Forfeit in ${countdown} seconds.`;
+          }
+        } catch (error) {
+          console.error("Could not check the private game rejoin state:", error);
+        }
+      }
+
+      async function reportPrivateGameLeft(roomCode, disconnectedUserId) {
+        if (!currentUser || !roomCode) return;
+        try {
+          await updatePrivateGameRejoin("left", roomCode, disconnectedUserId);
+        } catch (error) {
+          console.error("Could not start the private game reconnect window:", error);
+        }
       }
 
       async function checkActiveGame() {
@@ -1516,6 +1666,9 @@
       }
 
       async function finishGameHistory(status, result) {
+        if (!activeGameHistoryId && pendingGameHistory) {
+          await pendingGameHistory;
+        }
         if (!activeGameHistoryId) return true;
         const historyId = activeGameHistoryId;
         const gameMode = activeGameMode;
@@ -3250,7 +3403,7 @@
         selected = null;
         draw();
         show(game);
-        void beginGameHistory("pass_and_play", "Local opponent", tc);
+        startGameHistoryRecord("pass_and_play", "Local opponent", tc);
         if (timedMode) startClock();
       }
 
@@ -3282,7 +3435,7 @@
         selected = null;
         draw();
         show(game);
-        void beginGameHistory("computer", `Computer (${level})`, tc);
+        startGameHistoryRecord("computer", `Computer (${level})`, tc);
         if (timedMode) startClock();
       }
 
@@ -3843,6 +3996,11 @@
         started = true;
         hideGameOverModal();
         modalShownForGame = false;
+        if (!savedGame) {
+          stopPrivateGameRejoinPoll();
+          waitingPrivateGame = null;
+          privateGameRejoinReady = false;
+        }
         puzzleMode = false;
         $("standardControls").classList.remove("hidden");
         $("puzzleControls").classList.add("hidden");
@@ -3876,23 +4034,11 @@
         draw();
         show(game);
         if (!savedGame) {
-          const historyPromise = beginGameHistory(
+          startGameHistoryRecord(
             "private",
             "Private opponent",
             tc,
             currentRoomCode,
-          );
-          pendingGameHistory = historyPromise;
-          void historyPromise.then(
-            () => {
-              if (pendingGameHistory === historyPromise)
-                pendingGameHistory = null;
-            },
-            (error) => {
-              console.error("Could not start game history record:", error);
-              if (pendingGameHistory === historyPromise)
-                pendingGameHistory = null;
-            },
           );
         }
         if (savedGame) resumePrivateGameStatus();
@@ -3908,8 +4054,18 @@
         if (requestUndoBtn) requestUndoBtn.classList.add("hidden");
         if (undoRequestModal) undoRequestModal.classList.add("hidden");
         if (channel) {
-          if (notify)
-            await channel.send({ type: "broadcast", event: "player-left" });
+          if (notify && started && currentRoomCode) {
+            if (!activeGameHistoryId && pendingGameHistory)
+              await pendingGameHistory;
+            if (activeGameHistoryId)
+              await reportPrivateGameLeft(currentRoomCode, currentUser?.id);
+            const { error } = await channel.send({
+              type: "broadcast",
+              event: "player-left",
+              payload: { userId: currentUser?.id },
+            });
+            if (error) console.warn("Could not notify the opponent that you left:", error);
+          }
           await channel.unsubscribe();
           channel = null;
         }
@@ -3965,22 +4121,96 @@
         channel
           .on("presence", { event: "sync" }, updateLobby)
           .on("presence", { event: "leave" }, function (presence) {
-            const opponentLeft = Array.isArray(presence.leftPresences)
-              ? presence.leftPresences.some(
+            const leftPlayer = Array.isArray(presence.leftPresences)
+              ? presence.leftPresences.find(
                   (item) => item.userId !== currentUser?.id,
                 )
-              : presence.key !== id;
-            if (opponentLeft && started) {
+              : null;
+            const leftPlayerDetected =
+              leftPlayer || (!Array.isArray(presence.leftPresences) && presence.key !== id);
+            if (leftPlayerDetected && started) {
+              const roomCode = currentRoomCode;
+              void reportPrivateGameLeft(roomCode, leftPlayer?.userId || null);
+              waitingPrivateGame = {
+                room_code: roomCode,
+                id: activeGameHistoryId,
+              };
+              privateGameRejoinReady = false;
+              rejoinMeta.textContent = "Opponent disconnected · waiting up to 5 minutes";
+              if (!privateGameRejoinPoll) {
+                privateGameRejoinPoll = setInterval(
+                  () => void checkPrivateGameRejoin(roomCode),
+                  5000,
+                );
+              }
               alert("Your opponent left the game.");
               leavePrivate();
             } else {
               updateLobby();
             }
           })
-          .on("broadcast", { event: "player-left" }, function () {
+          .on("broadcast", { event: "player-left" }, function (message) {
             if (started) {
+              const roomCode = currentRoomCode;
+              void reportPrivateGameLeft(
+                roomCode,
+                message.payload?.userId,
+              );
+              waitingPrivateGame = {
+                room_code: roomCode,
+                id: activeGameHistoryId,
+              };
+              privateGameRejoinReady = false;
               alert("Your opponent left the game.");
               leavePrivate();
+            }
+          })
+          .on("broadcast", { event: "rejoin-request" }, async function () {
+            if (!started || !currentRoomCode) return;
+            try {
+              const state = await updatePrivateGameRejoin(
+                "rejoin",
+                currentRoomCode,
+              );
+              if (state?.state === "ready") {
+                await finishPrivateGameRejoin({
+                  pgn: chess.pgn(),
+                  current_fen: chess.fen(),
+                  clock_ms: { ...clockMs },
+                  last_move_at: new Date().toISOString(),
+                });
+              } else if (!privateGameRejoinPoll) {
+                waitingPrivateGame = {
+                  room_code: currentRoomCode,
+                  id: activeGameHistoryId,
+                };
+                privateGameRejoinReady = false;
+                const roomCode = currentRoomCode;
+                privateGameRejoinPoll = setInterval(
+                  () => void checkPrivateGameRejoin(roomCode),
+                  5000,
+                );
+              }
+            } catch (error) {
+              console.error("Could not acknowledge the opponent's rejoin:", error);
+            }
+          })
+          .on("broadcast", { event: "rejoin-ready" }, async function (message) {
+            if (message.payload?.senderId === id) return;
+            try {
+              const state = waitingPrivateGame
+                ? await updatePrivateGameRejoin("status", currentRoomCode)
+                : null;
+              if (state?.state === "ready") {
+                await finishPrivateGameRejoin({
+                  pgn: message.payload.pgn,
+                  current_fen: message.payload.currentFen,
+                  clock_ms: message.payload.clockMs,
+                  last_move_at: message.payload.lastMoveAt,
+                });
+              }
+            } catch (error) {
+              console.error("Could not restore the rejoined game:", error);
             }
           })
           .on("broadcast", { event: "start" }, function (message) {
@@ -4005,24 +4235,6 @@
               clockMs = { ...message.payload.clockMs };
             draw();
             if (timedMode) startClock();
-          })
-          .on("broadcast", { event: "resume" }, function (message) {
-            if (message.payload.senderId === id || !started) return;
-            try {
-              restorePrivateGamePosition({
-                pgn: message.payload.pgn,
-                current_fen: message.payload.currentFen,
-              });
-              restorePrivateGameClock({
-                clock_ms: message.payload.clockMs,
-                last_move_at: message.payload.lastMoveAt,
-                current_fen: message.payload.currentFen,
-              });
-              draw();
-              resumePrivateGameStatus();
-            } catch (error) {
-              console.warn("Could not apply the rejoined game position:", error);
-            }
           })
           .on("broadcast", { event: "undo-request" }, function (message) {
             if (message.payload.requesterId === id) return;
@@ -4085,22 +4297,45 @@
               ...getPresencePayload(savedGame.player_color),
               userId: currentUser?.id,
             });
-            enterGame(savedGame.time_control || "unlimited", savedGame);
-            if (rejoinBanner) rejoinBanner.classList.add("hidden");
-            resumableGame = null;
-            void channel.send({
-              type: "broadcast",
-              event: "resume",
-              payload: {
-                senderId: id,
-                pgn: savedGame.pgn,
-                currentFen: chess.fen(),
-                clockMs: savedGame.clock_ms,
-                lastMoveAt: savedGame.last_move_at,
-              },
-            }).catch((error) => {
-              console.warn("Could not notify the opponent about rejoining:", error);
-            });
+            waitingPrivateGame = savedGame;
+            privateGameRejoinReady = false;
+            lobbyPlayers.textContent =
+              "Waiting for both players to return. The game will be forfeited if the opponent does not return within 5 minutes.";
+            if (rejoinMeta)
+              rejoinMeta.textContent = "Waiting for the opponent · 5:00";
+            try {
+              const rejoinState = await updatePrivateGameRejoin(
+                "rejoin",
+                code,
+              );
+              if (rejoinState?.state === "ready") {
+                const snapshot = await getPrivateGameSnapshot(code);
+                await finishPrivateGameRejoin(snapshot);
+                return;
+              }
+              if (rejoinState?.state === "finished") {
+                await checkPrivateGameRejoin(code);
+                return;
+              }
+              const { error } = await channel.send({
+                type: "broadcast",
+                event: "rejoin-request",
+                payload: { senderId: id },
+              });
+              if (error)
+                console.warn("Could not request the opponent to rejoin:", error);
+              await checkPrivateGameRejoin(code);
+              if (!privateGameRejoinPoll) {
+                privateGameRejoinPoll = setInterval(
+                  () => void checkPrivateGameRejoin(code),
+                  5000,
+                );
+              }
+            } catch (error) {
+              console.error("Could not start the private game rejoin:", error);
+              lobbyPlayers.textContent =
+                "Could not coordinate the rejoin. Please try again.";
+            }
             return;
           }
           await channel.track({
@@ -4666,7 +4901,7 @@
       $("leaveBtn").onclick = () => leaveBtnClick();
 
       function leaveBtnClick() {
-        if (activeGameHistoryId)
+        if (!privateRoom)
           void finishGameHistory("abandoned", "Player left the game");
         if (puzzleMode) {
           if (currentPuzzlePage === "daily" || currentPuzzleIndex === -1) {
@@ -4689,7 +4924,7 @@
           await leavePrivate(wasInGame);
           return;
         }
-        if (wasInGame && activeGameHistoryId)
+        if (wasInGame)
           void finishGameHistory("abandoned", "Player left the game");
         stopClock();
         hideGameOverModal();
@@ -4857,10 +5092,35 @@
         };
       }
 
-      window.addEventListener(
-        "pagehide",
-        () => channel && supabaseClient.removeChannel(channel),
-      );
+      window.addEventListener("pagehide", () => {
+        if (privateRoom && started && currentRoomCode && currentUser) {
+          void supabaseClient.auth.getSession().then(({ data, error }) => {
+            if (error) {
+              console.warn("Could not authenticate the game-leave signal:", error.message);
+              return;
+            }
+            const accessToken = data.session?.access_token;
+            if (!accessToken) return;
+            void fetch(`${SUPABASE_URL}/functions/v1/rejoin-game`, {
+              method: "POST",
+              keepalive: true,
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                apikey: SUPABASE_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "left",
+                room_code: currentRoomCode,
+                disconnected_user_id: currentUser.id,
+              }),
+            }).catch((error) => {
+              console.warn("Could not send the game-leave signal:", error);
+            });
+          });
+        }
+        if (channel) void supabaseClient.removeChannel(channel);
+      });
 
       syncMoveHintsToggles();
       buildBoard();

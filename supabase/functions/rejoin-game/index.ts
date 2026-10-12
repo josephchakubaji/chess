@@ -2,22 +2,16 @@
  * rejoin-game edge function
  *
  * GET  → returns the caller's active in-progress private game snapshot
- * POST → updates the pgn snapshot for a game the caller owns
+ * POST → records a leave/rejoin signal and enforces the reconnect window
  *
  * The home screen reads the same active-game record through get_active_game.
  * The submit-move function keeps both players' board snapshots current.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-function corsHeaders(origin: string | null) {
-  const allowed = (Deno.env.get("APP_ORIGINS") || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+function corsHeaders() {
   return {
-    "Access-Control-Allow-Origin":
-      origin && allowed.includes(origin) ? origin : "null",
-    "Vary": "Origin",
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, accept, origin, x-requested-with",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -25,7 +19,7 @@ function corsHeaders(origin: string | null) {
 }
 
 Deno.serve(async (req) => {
-  const cors = corsHeaders(req.headers.get("Origin"));
+  const cors = corsHeaders();
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: cors, status: 200 });
@@ -74,37 +68,31 @@ Deno.serve(async (req) => {
     return Response.json({ game: data ?? null }, { headers: cors });
   }
 
-  // ── POST: update pgn + room_code for an in-progress game ─────────────────
-  let body: { game_id?: string; pgn?: string; room_code?: string } = {};
+  // ── POST: coordinate both players' reconnection attempts ──────────────────
+  let body: {
+    action?: "left" | "rejoin" | "status";
+    room_code?: string;
+    disconnected_user_id?: string;
+  } = {};
   try {
     body = await req.json();
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400, headers: cors });
   }
 
-  const { game_id, pgn, room_code } = body;
-  if (!game_id) {
-    return Response.json({ error: "game_id is required" }, { status: 400, headers: cors });
+  const { action, room_code, disconnected_user_id } = body;
+  if (!room_code || !["left", "rejoin", "status"].includes(action || "")) {
+    return Response.json({ error: "A room code and valid action are required" }, { status: 400, headers: cors });
+  }
+  const { data, error } = await supabase.rpc("update_private_game_rejoin", {
+    p_user_id: userId,
+    p_room_code: room_code,
+    p_action: action,
+    p_disconnected_user_id: disconnected_user_id || null,
+  });
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500, headers: cors });
   }
 
-  const updates: Record<string, string> = {};
-  if (typeof pgn === "string") updates.pgn = pgn;
-  if (typeof room_code === "string") updates.room_code = room_code;
-
-  if (Object.keys(updates).length === 0) {
-    return Response.json({ error: "Nothing to update" }, { status: 400, headers: cors });
-  }
-
-  const { error: updateError } = await supabase
-    .from("game_history")
-    .update(updates)
-    .eq("id", game_id)
-    .eq("user_id", userId)
-    .eq("status", "in_progress");
-
-  if (updateError) {
-    return Response.json({ error: updateError.message }, { status: 500, headers: cors });
-  }
-
-  return Response.json({ ok: true }, { headers: cors });
+  return Response.json(data, { headers: cors });
 });
