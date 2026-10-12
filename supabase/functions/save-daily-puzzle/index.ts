@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { DailyPuzzleSourceError, fetchDailyPuzzleRow } from "../_shared/daily-puzzle.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,43 +40,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: "A valid date is required" }, { status: 400, headers: corsHeaders });
     }
 
-    const sourceResponse = await fetch("https://lichess.org/api/puzzle/daily", {
-      headers: { Accept: "application/json" },
-    });
-    if (!sourceResponse.ok) {
-      return Response.json({ error: "Unable to fetch today's puzzle" }, { status: 502, headers: corsHeaders });
-    }
-
-    const sourceData = await sourceResponse.json();
-    const sourcePuzzle = sourceData?.puzzle;
-    const solution = sourcePuzzle?.solution;
-    if (
-      !sourcePuzzle?.id || !sourcePuzzle?.fen || !Array.isArray(solution) ||
-      solution.length < 4 || solution.length > 6 ||
-      solution.some((move) => typeof move !== "string" || !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move))
-    ) {
-      return Response.json({ error: "Today's source puzzle is not a 2-3 move line" }, { status: 422, headers: corsHeaders });
-    }
-
-    const themes = Array.isArray(sourcePuzzle.themes) ? sourcePuzzle.themes : [];
-    const themeTitle = themes[0]
-      ? themes[0].replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())
-      : "Tactical Challenge";
-    const moveCount = Math.ceil(solution.length / 2);
-    const row = {
-      date: body.date,
-      puzzle_id: `daily_${body.date}_${sourcePuzzle.id}`,
-      source_puzzle_id: sourcePuzzle.id,
-      title: `Daily: ${themeTitle}`,
-      category: "Advanced",
-      goal: `Find the best line in ${moveCount} moves.`,
-      fen: sourcePuzzle.fen,
-      solution,
-      hint: "Look for forcing checks, captures, and threats. Calculate the full line.",
-      rating: sourcePuzzle.rating || null,
-      themes,
-      source: "lichess",
-    };
+    const row = await fetchDailyPuzzleRow(body.date);
 
     const { data, error } = await supabase
       .from("daily_puzzles")
@@ -86,6 +51,7 @@ Deno.serve(async (req) => {
 
     return Response.json({ puzzle: data, saved: true }, { headers: corsHeaders });
   } catch (error) {
-    return Response.json({ error: error?.message || String(error) }, { status: 500, headers: corsHeaders });
+    const status = error instanceof DailyPuzzleSourceError ? error.status : 500;
+    return Response.json({ error: error?.message || String(error) }, { status, headers: corsHeaders });
   }
 });

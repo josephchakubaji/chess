@@ -455,8 +455,9 @@ with check (realtime.topic() like 'chess-%');
 -- AUTOMATED DAILY PUZZLE ARCHIVING
 -- ============================================================
 -- Requires pg_cron and pg_net extensions (enabled by default on Supabase).
--- The cron job runs every minute, checking that today's `public.daily_puzzles`
--- row exists and removing Auth users who have not verified email within 30 minutes.
+-- The cron job runs every minute, archives today's Lichess puzzle when its
+-- `public.daily_puzzles` row is missing, and removes Auth users who have not
+-- verified email within 30 minutes.
 --
 -- SETUP STEPS:
 --   1. Deploy the edge function:
@@ -517,4 +518,3 @@ select cron.schedule(
 --   ),
 --   body := '{}'::jsonb
 -- );
-
