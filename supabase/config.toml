@@ -3,3 +3,12 @@ verify_jwt = false
 
 [functions.register-user]
 verify_jwt = false
+
+[functions.rejoin-game]
+verify_jwt = true
+
+[functions.save-daily-puzzle]
+verify_jwt = true
+
+[functions.submit-move]
+verify_jwt = true
