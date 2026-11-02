@@ -679,10 +679,6 @@
             <div id="standardControls">
               <button class="btn" id="resetBtn">New game</button>
               <button class="btn" id="undoBtn">Undo move</button>
-              <!-- shown only in private rooms: asks opponent to allow undo -->
-              <button class="btn btn-secondary hidden" id="requestUndoBtn">
-                ⟲ Request undo
-              </button>
             </div>
 
             <div id="puzzleControls" class="puzzle-controls hidden">
@@ -780,28 +776,6 @@
             </button>
             <button class="text-btn" id="modalCloseBtn" type="button">
               Review Board
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Undo Request Modal (private rooms) -->
-      <div
-        class="modal-overlay hidden"
-        id="undoRequestModal"
-        aria-modal="true"
-        role="dialog"
-      >
-        <div class="modal-card undo-request-card">
-          <div class="undo-request-icon">⟲</div>
-          <h2 class="modal-title" id="undoRequestTitle">Undo Requested</h2>
-          <p class="modal-message" id="undoRequestMsg">
-            Your opponent wants to take back their last move.
-          </p>
-          <div class="modal-actions">
-            <button class="btn" id="undoAcceptBtn" type="button">Accept</button>
-            <button class="btn btn-secondary" id="undoDeclineBtn" type="button">
-              Decline
             </button>
           </div>
         </div>
@@ -1247,6 +1221,8 @@
         clockTimer = null,
         clockLastTick = 0,
         clockExpired = false;
+      let privateFinishRetryTimer = null,
+        privateFinishRetryCount = 0;
       const id = crypto.randomUUID();
       const ACTIVE_SCREEN_KEY = "chess_active_screen";
       const GAME_STATE_KEY = "chess_game_state";
@@ -1292,11 +1268,6 @@
         rejoinMeta = $("rejoinMeta"),
         rejoinBtn = $("rejoinBtn"),
         rejoinDismissBtn = $("rejoinDismissBtn");
-      const requestUndoBtn = $("requestUndoBtn"),
-        undoRequestModal = $("undoRequestModal"),
-        undoRequestMsg = $("undoRequestMsg"),
-        undoAcceptBtn = $("undoAcceptBtn"),
-        undoDeclineBtn = $("undoDeclineBtn");
       let authRegisterMode = false,
         currentUser = null,
         currentUserProfile = null,
@@ -1311,7 +1282,6 @@
       let privateGameRejoinPoll = null;
       let waitingPrivateGame = null;
       let privateGameRejoinReady = false;
-      let undoRequestedByMe = false;
 
       function getRatingLevel(rating) {
         if (rating >= 1800) return "1800+ Expert";
@@ -1395,7 +1365,10 @@
       ) {
         if (!currentUser) return false;
         if (activeGameHistoryId) {
-          const finished = await finishGameHistory("abandoned", "New game started");
+          const finished = await finishGameHistory(
+            "abandoned",
+            "New game started",
+          );
           if (!finished) return false;
         }
         const insertPayload = {
@@ -1433,7 +1406,12 @@
         return Boolean(activeGameHistoryId);
       }
 
-      function startGameHistoryRecord(mode, opponent, timeControl, roomCode = null) {
+      function startGameHistoryRecord(
+        mode,
+        opponent,
+        timeControl,
+        roomCode = null,
+      ) {
         const previousStart = pendingGameHistory;
         const startRequest = (async () => {
           if (previousStart) await previousStart;
@@ -1442,13 +1420,11 @@
         pendingGameHistory = startRequest;
         void startRequest.then(
           () => {
-            if (pendingGameHistory === startRequest)
-              pendingGameHistory = null;
+            if (pendingGameHistory === startRequest) pendingGameHistory = null;
           },
           (error) => {
             console.error("Could not start game history record:", error);
-            if (pendingGameHistory === startRequest)
-              pendingGameHistory = null;
+            if (pendingGameHistory === startRequest) pendingGameHistory = null;
           },
         );
       }
@@ -1490,7 +1466,11 @@
         return result;
       }
 
-      async function updatePrivateGameRejoin(action, roomCode, disconnectedUserId = null) {
+      async function updatePrivateGameRejoin(
+        action,
+        roomCode,
+        disconnectedUserId = null,
+      ) {
         const { data, error } = await supabaseClient.functions.invoke(
           "rejoin-game",
           {
@@ -1548,7 +1528,11 @@
               lastMoveAt: new Date().toISOString(),
             },
           });
-          if (error) console.warn("Could not notify the opponent about rejoining:", error);
+          if (error)
+            console.warn(
+              "Could not notify the opponent about rejoining:",
+              error,
+            );
         }
         showToast("Both players are back. The game has resumed.");
       }
@@ -1556,7 +1540,9 @@
       async function getPrivateGameSnapshot(roomCode) {
         const { data, error } = await supabaseClient
           .from("game_history")
-          .select("id,pgn,current_fen,player_color,time_control,clock_ms,last_move_at")
+          .select(
+            "id,pgn,initial_fen,current_fen,player_color,time_control,clock_ms,last_move_at",
+          )
           .eq("room_code", roomCode)
           .eq("user_id", currentUser.id)
           .eq("mode", "private")
@@ -1576,7 +1562,9 @@
           } else if (state?.state === "finished") {
             stopPrivateGameRejoinPoll();
             const gameId =
-              waitingPrivateGame?.id || resumableGame?.id || activeGameHistoryId;
+              waitingPrivateGame?.id ||
+              resumableGame?.id ||
+              activeGameHistoryId;
             waitingPrivateGame = null;
             if (rejoinBanner) rejoinBanner.classList.add("hidden");
             resumableGame = null;
@@ -1587,24 +1575,37 @@
                 p_game_id: gameId,
                 p_result: state.result,
               });
-              if (error) console.warn("Could not record the forfeit rating:", error.message);
+              if (error)
+                console.warn(
+                  "Could not record the forfeit rating:",
+                  error.message,
+                );
             }
-            const message = state.result === "win"
-              ? "Your opponent did not return within 5 minutes. You win."
-              : "You did not return within 5 minutes. The game is recorded as a loss.";
+            const message =
+              state.result === "win"
+                ? "Your opponent did not return within 5 minutes. You win."
+                : "You did not return within 5 minutes. The game is recorded as a loss.";
             showToast(message);
             if (privateRoom) await leavePrivate(false);
-          } else if (state?.state === "waiting" && state.deadline && rejoinMeta) {
-            const remaining = Math.max(0, Date.parse(state.deadline) - Date.now());
+          } else if (
+            state?.state === "waiting" &&
+            state.deadline &&
+            rejoinMeta
+          ) {
+            const remaining = Math.max(
+              0,
+              Date.parse(state.deadline) - Date.now(),
+            );
             const countdown = Math.ceil(remaining / 1000);
-            rejoinMeta.textContent =
-              `Waiting for both players to return · ${countdown}s`;
+            rejoinMeta.textContent = `Waiting for both players to return · ${countdown}s`;
             if (waitingPrivateGame)
-              lobbyPlayers.textContent =
-                `Waiting for both players to return. Forfeit in ${countdown} seconds.`;
+              lobbyPlayers.textContent = `Waiting for both players to return. Forfeit in ${countdown} seconds.`;
           }
         } catch (error) {
-          console.error("Could not check the private game rejoin state:", error);
+          console.error(
+            "Could not check the private game rejoin state:",
+            error,
+          );
         }
       }
 
@@ -1613,7 +1614,10 @@
         try {
           await updatePrivateGameRejoin("left", roomCode, disconnectedUserId);
         } catch (error) {
-          console.error("Could not start the private game reconnect window:", error);
+          console.error(
+            "Could not start the private game reconnect window:",
+            error,
+          );
         }
       }
 
@@ -1632,7 +1636,9 @@
           } else {
             const { data: selectData, error: selectErr } = await supabaseClient
               .from("game_history")
-              .select("id, room_code, pgn, time_control, created_at, current_fen, player_color, clock_ms, last_move_at")
+              .select(
+                "id, room_code, pgn, initial_fen, time_control, created_at, current_fen, player_color, clock_ms, last_move_at",
+              )
               .eq("user_id", currentUser.id)
               .eq("mode", "private")
               .eq("status", "in_progress")
@@ -1665,7 +1671,23 @@
         }
       }
 
+      function retryPrivateGameFinish(historyId, status, result) {
+        if (privateFinishRetryTimer || privateFinishRetryCount >= 5) return;
+        privateFinishRetryCount++;
+        privateFinishRetryTimer = setTimeout(() => {
+          privateFinishRetryTimer = null;
+          if (activeGameHistoryId === historyId) {
+            void finishGameHistory(status, result);
+          }
+        }, 1500);
+      }
+
       async function finishGameHistory(status, result) {
+        if (status === "abandoned" && privateFinishRetryTimer) {
+          clearTimeout(privateFinishRetryTimer);
+          privateFinishRetryTimer = null;
+          privateFinishRetryCount = 0;
+        }
         if (!activeGameHistoryId && pendingGameHistory) {
           await pendingGameHistory;
         }
@@ -1676,17 +1698,64 @@
         if (!userId) return false;
         activeGameHistoryId = null;
         activeGameMode = null;
+
+        if (gameMode === "private" && status !== "abandoned") {
+          let finishedGame = null;
+          let finishError = null;
+          try {
+            const response = await supabaseClient.functions.invoke(
+              "finish-game",
+              {
+                body: { game_id: historyId },
+              },
+            );
+            finishedGame = response.data;
+            finishError = response.error;
+          } catch (error) {
+            finishError = error;
+          }
+          if (finishError || !finishedGame?.result) {
+            console.error(
+              "Could not finish private game:",
+              finishError?.message ||
+                "The server did not verify a game result.",
+            );
+            activeGameHistoryId = historyId;
+            activeGameMode = gameMode;
+            retryPrivateGameFinish(historyId, status, result);
+            return false;
+          }
+          const { error: eloError } = await supabaseClient.rpc(
+            "record_elo_result",
+            { p_game_id: historyId, p_result: finishedGame.result },
+          );
+          if (eloError) {
+            console.error("Could not record game result:", eloError.message);
+            activeGameHistoryId = historyId;
+            activeGameMode = gameMode;
+            retryPrivateGameFinish(historyId, status, result);
+            return false;
+          }
+          privateFinishRetryCount = 0;
+          await loadUserRating();
+          void checkActiveGame();
+          return true;
+        }
+
         const { error: updateError } = await supabaseClient
           .from("game_history")
           .update({
             status,
-            result: result || null,
+            result: gameMode === "private" ? null : result || null,
             finished_at: new Date().toISOString(),
           })
           .eq("id", historyId)
           .eq("user_id", userId);
         if (updateError) {
-          console.error("Could not finish game history record:", updateError.message);
+          console.error(
+            "Could not finish game history record:",
+            updateError.message,
+          );
           if (!activeGameHistoryId) {
             activeGameHistoryId = historyId;
             activeGameMode = gameMode;
@@ -1695,20 +1764,6 @@
         }
         // Elo is only updated for rated player-vs-player (private) games.
         // Computer and pass-and-play games are unrated.
-        const isRated = gameMode === "private";
-        if (
-          isRated &&
-          (status === "completed" || status === "draw") &&
-          result
-        ) {
-          const { error: eloError } = await supabaseClient.rpc("record_elo_result", {
-            p_game_id: historyId,
-            p_result: result,
-          });
-          if (eloError)
-            console.error("Could not record game result:", eloError.message);
-          await loadUserRating();
-        }
         void checkActiveGame();
         return true;
       }
@@ -2766,13 +2821,6 @@
             const msg = `${loser} ran out of time! ${winner} wins.`;
             status.textContent = msg;
 
-            if (privateRoom && channel) {
-              channel.send({
-                type: "broadcast",
-                event: "timeout",
-                payload: { loser, winner },
-              });
-            }
             draw();
             if (!modalShownForGame) {
               modalShownForGame = true;
@@ -3022,17 +3070,20 @@
               : !computerMode && chess.turn() === "b";
         board.classList.toggle("flipped", shouldFlip);
 
-        moveHistoryBody.innerHTML = moveHistory.length
-          ? moveHistory
-              .reduce((rows, move, index) => {
-                if (index % 2 === 0)
-                  rows.push(
-                    `<tr><td>${Math.floor(index / 2) + 1}</td><td>${move}</td><td>${moveHistory[index + 1] || ""}</td></tr>`,
-                  );
-                return rows;
-              }, [])
-              .join("")
-          : '<tr><td colspan="3">No moves yet</td></tr>';
+        moveHistoryBody.replaceChildren();
+        if (moveHistory.length) {
+          for (let index = 0; index < moveHistory.length; index += 2) {
+            const row = moveHistoryBody.insertRow();
+            row.insertCell().textContent = String(Math.floor(index / 2) + 1);
+            row.insertCell().textContent = moveHistory[index];
+            row.insertCell().textContent = moveHistory[index + 1] || "";
+          }
+        } else {
+          const row = moveHistoryBody.insertRow();
+          const cell = row.insertCell();
+          cell.colSpan = 3;
+          cell.textContent = "No moves yet";
+        }
 
         replayBtn.disabled = replaying || moveHistory.length === 0;
         if (replayBtn) {
@@ -3044,12 +3095,6 @@
 
         if (privateRoom) {
           undo.classList.add("hidden");
-          if (requestUndoBtn) {
-            requestUndoBtn.classList.toggle(
-              "hidden",
-              chess.game_over() || clockExpired || replaying,
-            );
-          }
         } else if (!puzzleMode) {
           undo.classList.remove("hidden");
           undo.disabled =
@@ -3289,17 +3334,20 @@
               return;
             }
 
-            if (timedMode) clockMs[move.color] += clockIncrement;
+            if (timedMode && !privateRoom)
+              clockMs[move.color] += clockIncrement;
             selected = null;
             lastMove = { from: move.from, to: move.to };
             moveHistory.push(chess.history().slice(-1)[0]);
 
             if (privateRoom) {
+              stopClock();
               try {
                 const serverMove = await submitMoveToServer(move, fenBefore);
                 chess.load(serverMove.fen);
                 lastMove = { from: serverMove.from, to: serverMove.to };
-                moveHistory = chess.history();
+                moveHistory = serverMove.history;
+                if (serverMove.clock_ms) clockMs = { ...serverMove.clock_ms };
                 await channel.send({
                   type: "broadcast",
                   event: "move",
@@ -3308,7 +3356,7 @@
                     from: serverMove.from,
                     to: serverMove.to,
                     history: moveHistory,
-                    clockMs,
+                    clockMs: { ...clockMs },
                     validatedByServer: true,
                   },
                 });
@@ -3321,6 +3369,8 @@
                   serverMoveError.message || "Move rejected by the server.",
                 );
                 draw();
+                if (timedMode && !clockExpired && !chess.game_over())
+                  startClock();
                 return;
               }
             }
@@ -3926,7 +3976,12 @@
       function restorePrivateGamePosition(savedGame) {
         let restoredFromPgn = false;
         chess.reset();
-        const initialFen = chess.fen();
+        const pgnInitialFen = savedGame.pgn?.match(/^\[FEN "([^"]+)"\]$/m)?.[1];
+        const initialFen =
+          savedGame.initial_fen || pgnInitialFen || chess.fen();
+        if (!chess.load(initialFen)) {
+          throw new Error("The saved starting position is invalid.");
+        }
         if (savedGame.pgn) {
           try {
             restoredFromPgn = chess.load_pgn(savedGame.pgn);
@@ -3941,7 +3996,9 @@
             throw new Error("The saved board position is invalid.");
           }
           if (savedGame.pgn) {
-            console.warn("Saved PGN did not match the board; restored the saved FEN.");
+            console.warn(
+              "Saved PGN did not match the board; restored the saved FEN.",
+            );
           }
         }
         moveHistory = chess.history();
@@ -3960,7 +4017,8 @@
           savedClock.w < 0 ||
           !Number.isFinite(savedClock.b) ||
           savedClock.b < 0
-        ) return;
+        )
+          return;
 
         clockMs = { w: savedClock.w, b: savedClock.b };
         const activeColor = savedGame.current_fen?.split(" ")[1];
@@ -3986,13 +4044,20 @@
         } else if (timedMode && clockExpired) {
           const loser = chess.turn() === "w" ? "White" : "Black";
           const winner = chess.turn() === "w" ? "Black" : "White";
-          showGameOverModal("Time Out!", `${loser} ran out of time! ${winner} wins.`);
+          showGameOverModal(
+            "Time Out!",
+            `${loser} ran out of time! ${winner} wins.`,
+          );
         } else if (timedMode) {
           startClock();
         }
       }
 
-      function enterGame(tc = selectedTimeControl, savedGame = null) {
+      function enterGame(
+        tc = selectedTimeControl,
+        savedGame = null,
+        startingFen = null,
+      ) {
         started = true;
         hideGameOverModal();
         modalShownForGame = false;
@@ -4004,7 +4069,6 @@
         puzzleMode = false;
         $("standardControls").classList.remove("hidden");
         $("puzzleControls").classList.add("hidden");
-        if (requestUndoBtn) requestUndoBtn.classList.remove("hidden");
         if (savedGame) color = savedGame.player_color;
         selectedTimeControl = tc;
         timedMode = tc !== "unlimited";
@@ -4019,16 +4083,20 @@
           activeGameMode = "private";
         } else {
           chess.reset();
-          gameInitialFen = chess.fen();
           moveHistory = [];
           undoStack = [];
           lastMove = null;
           selected = null;
 
-          if (selectedVariant === "chess960") {
+          if (startingFen) {
+            if (!chess.load(startingFen)) {
+              throw new Error("The shared starting position is invalid.");
+            }
+          } else if (selectedVariant === "chess960") {
             chess.load(randomChess960Fen());
             showToast("Chess960 starting position loaded.");
           }
+          gameInitialFen = chess.fen();
         }
 
         draw();
@@ -4051,8 +4119,6 @@
         modalShownForGame = false;
         timedMode = false;
         puzzleMode = false;
-        if (requestUndoBtn) requestUndoBtn.classList.add("hidden");
-        if (undoRequestModal) undoRequestModal.classList.add("hidden");
         if (channel) {
           if (notify && started && currentRoomCode) {
             if (!activeGameHistoryId && pendingGameHistory)
@@ -4064,7 +4130,11 @@
               event: "player-left",
               payload: { userId: currentUser?.id },
             });
-            if (error) console.warn("Could not notify the opponent that you left:", error);
+            if (error)
+              console.warn(
+                "Could not notify the opponent that you left:",
+                error,
+              );
           }
           await channel.unsubscribe();
           channel = null;
@@ -4083,6 +4153,19 @@
         roomLinkInput.value = link.href;
       }
 
+      function createRoomCode() {
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        const code = [];
+        while (code.length < 6) {
+          crypto.getRandomValues(new Uint8Array(12)).forEach((value) => {
+            if (value < 252 && code.length < 6) {
+              code.push(alphabet[value % alphabet.length]);
+            }
+          });
+        }
+        return code.join("");
+      }
+
       function clearRoomLink() {
         const link = new URL(window.location.href);
         link.search = "";
@@ -4090,6 +4173,30 @@
       }
 
       async function joinPrivate(code, isHost, savedGame = null) {
+        code = typeof code === "string" ? code.trim().toUpperCase() : "";
+        if (!/^[A-Z0-9]{6}$/.test(code)) {
+          error.textContent = "Enter a valid six-character room code.";
+          show(room);
+          return;
+        }
+        try {
+          const { error: membershipError } = await supabaseClient.rpc(
+            "join_private_chess_room",
+            { p_room_code: code, p_create: isHost },
+          );
+          if (membershipError) {
+            error.textContent =
+              membershipError.message || "Could not join this private room.";
+            show(room);
+            return;
+          }
+        } catch (membershipError) {
+          error.textContent =
+            membershipError?.message || "Could not join this private room.";
+          show(room);
+          return;
+        }
+
         stopClock();
         hideGameOverModal();
         modalShownForGame = false;
@@ -4127,7 +4234,8 @@
                 )
               : null;
             const leftPlayerDetected =
-              leftPlayer || (!Array.isArray(presence.leftPresences) && presence.key !== id);
+              leftPlayer ||
+              (!Array.isArray(presence.leftPresences) && presence.key !== id);
             if (leftPlayerDetected && started) {
               const roomCode = currentRoomCode;
               void reportPrivateGameLeft(roomCode, leftPlayer?.userId || null);
@@ -4136,7 +4244,8 @@
                 id: activeGameHistoryId,
               };
               privateGameRejoinReady = false;
-              rejoinMeta.textContent = "Opponent disconnected · waiting up to 5 minutes";
+              rejoinMeta.textContent =
+                "Opponent disconnected · waiting up to 5 minutes";
               if (!privateGameRejoinPoll) {
                 privateGameRejoinPoll = setInterval(
                   () => void checkPrivateGameRejoin(roomCode),
@@ -4152,10 +4261,7 @@
           .on("broadcast", { event: "player-left" }, function (message) {
             if (started) {
               const roomCode = currentRoomCode;
-              void reportPrivateGameLeft(
-                roomCode,
-                message.payload?.userId,
-              );
+              void reportPrivateGameLeft(roomCode, message.payload?.userId);
               waitingPrivateGame = {
                 room_code: roomCode,
                 id: activeGameHistoryId,
@@ -4173,12 +4279,8 @@
                 currentRoomCode,
               );
               if (state?.state === "ready") {
-                await finishPrivateGameRejoin({
-                  pgn: chess.pgn(),
-                  current_fen: chess.fen(),
-                  clock_ms: { ...clockMs },
-                  last_move_at: new Date().toISOString(),
-                });
+                const snapshot = await getPrivateGameSnapshot(currentRoomCode);
+                await finishPrivateGameRejoin(snapshot);
               } else if (!privateGameRejoinPoll) {
                 waitingPrivateGame = {
                   room_code: currentRoomCode,
@@ -4192,7 +4294,10 @@
                 );
               }
             } catch (error) {
-              console.error("Could not acknowledge the opponent's rejoin:", error);
+              console.error(
+                "Could not acknowledge the opponent's rejoin:",
+                error,
+              );
             }
           })
           .on("broadcast", { event: "rejoin-ready" }, async function (message) {
@@ -4202,18 +4307,15 @@
                 ? await updatePrivateGameRejoin("status", currentRoomCode)
                 : null;
               if (state?.state === "ready") {
-                await finishPrivateGameRejoin({
-                  pgn: message.payload.pgn,
-                  current_fen: message.payload.currentFen,
-                  clock_ms: message.payload.clockMs,
-                  last_move_at: message.payload.lastMoveAt,
-                });
+                const snapshot = await getPrivateGameSnapshot(currentRoomCode);
+                await finishPrivateGameRejoin(snapshot);
               }
             } catch (error) {
               console.error("Could not restore the rejoined game:", error);
             }
           })
           .on("broadcast", { event: "start" }, function (message) {
+            if (started) return;
             const assignedColor =
               message.payload.colors[id] || (host ? "w" : "b");
             color = assignedColor;
@@ -4223,53 +4325,44 @@
                 el.value = selectedVariant;
               });
             }
-            enterGame(message.payload.timeControl || selectedTimeControl);
+            enterGame(
+              message.payload.timeControl || selectedTimeControl,
+              null,
+              message.payload.initialFen || null,
+            );
           })
-          .on("broadcast", { event: "move" }, function (message) {
-            chess.load(message.payload.fen);
-            lastMove = message.payload.from
-              ? { from: message.payload.from, to: message.payload.to }
-              : null;
-            moveHistory = message.payload.history || [];
-            if (message.payload.clockMs)
-              clockMs = { ...message.payload.clockMs };
-            draw();
-            if (timedMode) startClock();
-          })
-          .on("broadcast", { event: "undo-request" }, function (message) {
-            if (message.payload.requesterId === id) return;
-            if (undoRequestMsg) {
-              undoRequestMsg.textContent =
-                "Your opponent requested to take back their last move. Do you allow it?";
-            }
-            if (undoRequestModal) undoRequestModal.classList.remove("hidden");
-          })
-          .on("broadcast", { event: "undo-response" }, function (message) {
-            if (message.payload.accepted) {
-              if (message.payload.fen) {
-                chess.load(message.payload.fen);
-                lastMove = message.payload.lastMove || null;
-                moveHistory = message.payload.history || [];
-                if (message.payload.clockMs)
-                  clockMs = { ...message.payload.clockMs };
-                draw();
-                if (timedMode && !chess.game_over()) startClock();
+          .on("broadcast", { event: "move" }, async function () {
+            try {
+              if (!activeGameHistoryId && pendingGameHistory) {
+                await pendingGameHistory;
               }
-              showToast("Undo request was accepted! ⟲");
-            } else {
-              showToast("Undo request was declined.");
-            }
-            undoRequestedByMe = false;
-          })
-          .on("broadcast", { event: "timeout" }, function (message) {
-            clockExpired = true;
-            stopClock();
-            const msg = `${message.payload.loser} ran out of time! ${message.payload.winner} wins.`;
-            status.textContent = msg;
-            renderClocks();
-            if (!modalShownForGame) {
-              modalShownForGame = true;
-              showGameOverModal("Time Out!", msg);
+              if (!activeGameHistoryId) return;
+              const { data: savedGame, error: snapshotError } =
+                await supabaseClient
+                  .from("game_history")
+                  .select(
+                    "pgn,initial_fen,current_fen,time_control,clock_ms,last_move_at",
+                  )
+                  .eq("id", activeGameHistoryId)
+                  .eq("user_id", currentUser.id)
+                  .maybeSingle();
+              if (snapshotError) throw snapshotError;
+              if (!savedGame) return;
+              restorePrivateGamePosition(savedGame);
+              const history = chess.history({ verbose: true });
+              const lastPly = history[history.length - 1];
+              lastMove = lastPly
+                ? { from: lastPly.from, to: lastPly.to }
+                : null;
+              restorePrivateGameClock(savedGame);
+              draw();
+              if (timedMode && !chess.game_over() && !clockExpired)
+                startClock();
+            } catch (snapshotError) {
+              console.error(
+                "Could not load the verified opponent move:",
+                snapshotError?.message || String(snapshotError),
+              );
             }
           })
           .on("broadcast", { event: "new-game" }, function () {
@@ -4304,10 +4397,7 @@
             if (rejoinMeta)
               rejoinMeta.textContent = "Waiting for the opponent · 5:00";
             try {
-              const rejoinState = await updatePrivateGameRejoin(
-                "rejoin",
-                code,
-              );
+              const rejoinState = await updatePrivateGameRejoin("rejoin", code);
               if (rejoinState?.state === "ready") {
                 const snapshot = await getPrivateGameSnapshot(code);
                 await finishPrivateGameRejoin(snapshot);
@@ -4323,7 +4413,10 @@
                 payload: { senderId: id },
               });
               if (error)
-                console.warn("Could not request the opponent to rejoin:", error);
+                console.warn(
+                  "Could not request the opponent to rejoin:",
+                  error,
+                );
               await checkPrivateGameRejoin(code);
               if (!privateGameRejoinPoll) {
                 privateGameRejoinPoll = setInterval(
@@ -4820,8 +4913,8 @@
 
       $("createRoomBtn").onclick = async () => {
         error.textContent = "";
-        const code = Math.random().toString(36).slice(2, 8).toUpperCase();
-        joinPrivate(code, true);
+        const code = createRoomCode();
+        await joinPrivate(code, true);
       };
 
       $("joinRoomPanel").onsubmit = async (e) => {
@@ -4832,7 +4925,7 @@
           error.textContent = "Please enter a valid 6-character room code.";
           return;
         }
-        joinPrivate(inputCode, false);
+        await joinPrivate(inputCode, false);
       };
 
       copyRoomLinkBtn.onclick = async () => {
@@ -4842,6 +4935,7 @@
       };
 
       startPrivate.onclick = async () => {
+        if (!host) return;
         const list = players();
         if (list.length < 2) {
           lobbyError.textContent =
@@ -4875,6 +4969,10 @@
 
         if (channel) {
           try {
+            const initialFen =
+              selectedVariant === "chess960"
+                ? randomChess960Fen()
+                : new Chess().fen();
             await channel.send({
               type: "broadcast",
               event: "start",
@@ -4882,6 +4980,7 @@
                 colors,
                 timeControl: selectedTimeControl,
                 variant: selectedVariant || "standard",
+                initialFen,
               },
             });
           } catch (e) {
@@ -4969,7 +5068,10 @@
             showToast("No active game to rejoin.");
             return;
           }
-          if (resumableGame.player_color !== "w" && resumableGame.player_color !== "b") {
+          if (
+            resumableGame.player_color !== "w" &&
+            resumableGame.player_color !== "b"
+          ) {
             const enteredColor = window.prompt(
               "This saved game predates side tracking. Enter White or Black to rejoin:",
             );
@@ -4997,106 +5099,14 @@
         };
       }
 
-      if (requestUndoBtn) {
-        requestUndoBtn.onclick = async () => {
-          if (!privateRoom || !channel || !started) {
-            showToast(
-              "Undo request is only available during an active private game.",
-            );
-            return;
-          }
-          if (undoRequestedByMe) {
-            showToast("Undo request already pending.");
-            return;
-          }
-          undoRequestedByMe = true;
-          try {
-            await channel.send({
-              type: "broadcast",
-              event: "undo-request",
-              payload: { requesterId: id },
-            });
-            showToast("Undo request sent to opponent...");
-          } catch (err) {
-            undoRequestedByMe = false;
-            showToast("Could not send undo request.");
-          }
-        };
-      }
-
-      if (undoAcceptBtn) {
-        undoAcceptBtn.onclick = async () => {
-          if (undoRequestModal) undoRequestModal.classList.add("hidden");
-          if (!channel || !privateRoom) return;
-
-          let targetFen = null;
-          let targetLastMove = null;
-          let targetHistory = [];
-          let targetClocks = { ...clockMs };
-
-          if (undoStack.length > 0) {
-            const popped = undoStack.pop();
-            targetFen = popped.fen;
-            targetLastMove = popped.lastMove;
-            targetHistory = popped.moveHistory;
-            targetClocks = { ...popped.clockMs };
-          } else {
-            chess.undo();
-            targetFen = chess.fen();
-            targetHistory = chess.history();
-          }
-
-          if (targetFen) {
-            chess.load(targetFen);
-            lastMove = targetLastMove;
-            moveHistory = targetHistory;
-            clockMs = targetClocks;
-            draw();
-            if (timedMode && !chess.game_over()) startClock();
-          }
-
-          try {
-            await channel.send({
-              type: "broadcast",
-              event: "undo-response",
-              payload: {
-                accepted: true,
-                fen: targetFen,
-                lastMove: targetLastMove,
-                history: targetHistory,
-                clockMs: targetClocks,
-              },
-            });
-          } catch (err) {
-            console.warn("Error sending undo-response:", err);
-          }
-          showToast("You accepted the undo request. ⟲");
-        };
-      }
-
-      if (undoDeclineBtn) {
-        undoDeclineBtn.onclick = async () => {
-          if (undoRequestModal) undoRequestModal.classList.add("hidden");
-          if (channel && privateRoom) {
-            try {
-              await channel.send({
-                type: "broadcast",
-                event: "undo-response",
-                payload: { accepted: false },
-              });
-            } catch (err) {
-              console.warn("Error sending undo decline:", err);
-            }
-          }
-          showToast("You declined the undo request.");
-        };
-      }
-
       window.addEventListener("pagehide", () => {
         if (privateRoom && started && currentRoomCode && currentUser) {
           void supabaseClient.auth.getSession().then(({ data, error }) => {
             if (error) {
-              console.warn("Could not authenticate the game-leave signal:", error.message);
+              console.warn(
+                "Could not authenticate the game-leave signal:",
+                error.message,
+              );
               return;
             }
             const accessToken = data.session?.access_token;

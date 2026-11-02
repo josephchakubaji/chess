@@ -17,7 +17,7 @@ Write-Host "Pushing database migrations..."
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Deploying Edge Functions..."
-& npx --yes supabase@latest functions deploy rejoin-game submit-move save-daily-puzzle register-user cron-save-daily-puzzle
+& npx --yes supabase@latest functions deploy rejoin-game submit-move finish-game save-daily-puzzle register-user cron-save-daily-puzzle
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Supabase setup complete."

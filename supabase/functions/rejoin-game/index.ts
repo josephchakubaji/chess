@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET") {
     const { data, error } = await supabase
       .from("game_history")
-      .select("id, room_code, pgn, time_control, created_at, current_fen, player_color, clock_ms, last_move_at")
+      .select("id, room_code, pgn, initial_fen, time_control, created_at, current_fen, player_color, clock_ms, last_move_at")
       .eq("user_id", userId)
       .eq("mode", "private")
       .eq("status", "in_progress")

@@ -12,3 +12,6 @@ verify_jwt = true
 
 [functions.submit-move]
 verify_jwt = true
+
+[functions.finish-game]
+verify_jwt = true

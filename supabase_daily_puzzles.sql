@@ -1,3 +1,6 @@
+-- After running this legacy SQL setup, apply all migrations with
+-- `supabase db push` before using private rooms or rated online games.
+
 create table if not exists public.daily_puzzles (
   date date primary key,
   puzzle_id text not null,
@@ -102,6 +105,9 @@ create table if not exists public.game_history (
 
 alter table public.game_history
 add column if not exists elo_processed boolean not null default false;
+
+alter table public.game_history
+add column if not exists result_verified boolean not null default false;
 
 -- Columns for rejoin-game support:
 -- room_code stores the Supabase Realtime channel code so a player can reconnect.
@@ -626,6 +632,10 @@ begin
 
   if not found then raise exception 'Game not found'; end if;
   if game_record.status not in ('completed', 'draw') then raise exception 'Game is not completed'; end if;
+  if game_record.mode = 'private'
+     and (not game_record.result_verified or game_record.result is distinct from p_result) then
+    raise exception 'The server has not verified this game result';
+  end if;
   if game_record.elo_processed then
     select * into player from public.profiles where id = auth.uid();
     return player;
@@ -660,7 +670,7 @@ begin
 end;
 $$;
 
-revoke all on function public.record_elo_result(uuid, text) from public;
+revoke all on function public.record_elo_result(uuid, text) from public, anon;
 grant execute on function public.record_elo_result(uuid, text) to authenticated;
 
 do $$
@@ -720,12 +730,8 @@ $$;
 
 -- Realtime channels used by the app are private and require an authenticated user.
 drop policy if exists "Authenticated users can use chess realtime channels" on realtime.messages;
-create policy "Authenticated users can use chess realtime channels"
-on realtime.messages
-for all
-to authenticated
-using (realtime.topic() like 'chess-%')
-with check (realtime.topic() like 'chess-%');
+-- The membership-scoped policies are installed by
+-- supabase/migrations/20261029000100_secure_private_games.sql.
 
 -- ============================================================
 -- AUTOMATED DAILY PUZZLE ARCHIVING

@@ -1526,28 +1526,6 @@ body[data-piece-theme="glass"] .piece { opacity: 0.88; filter: drop-shadow(0 2px
   color: #fff;
 }
 
-.undo-request-card {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  max-width: 380px;
-  text-align: center;
-}
-
-.undo-request-icon {
-  align-items: center;
-  background: rgba(83, 190, 240, 0.15);
-  border: 1px solid rgba(83, 190, 240, 0.35);
-  border-radius: 50%;
-  color: #53bef0;
-  display: flex;
-  font-size: 2rem;
-  height: 60px;
-  justify-content: center;
-  margin-bottom: 12px;
-  width: 60px;
-}
-
 @media (max-width: 520px) {
   .rejoin-banner-inner {
     align-items: flex-start;
@@ -1561,4 +1539,3 @@ body[data-piece-theme="glass"] .piece { opacity: 0.88; filter: drop-shadow(0 2px
     flex: 1;
   }
 }
-
